@@ -2,6 +2,7 @@
 #include <cstring>
 #include <errno.h>
 #include <fcntl.h>
+#include <sys/select.h>
 
 namespace tinydb {
 namespace network {
@@ -88,6 +89,33 @@ void Server::stop() {
 
 void Server::acceptLoop() {
     while (running_.load()) {
+        // 使用 select 来检查是否有新的连接，这样可以在超时后检查 running_ 状态
+        fd_set read_fds;
+        FD_ZERO(&read_fds);
+        FD_SET(listen_fd_, &read_fds);
+
+        struct timeval timeout;
+        timeout.tv_sec = 1;  // 1秒超时
+        timeout.tv_usec = 0;
+
+        int ret = ::select(listen_fd_ + 1, &read_fds, nullptr, nullptr, &timeout);
+        if (ret < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            LOG_ERROR("select() failed: " << strerror(errno));
+            break;
+        }
+
+        if (ret == 0) {
+            // 超时，继续循环检查 running_
+            continue;
+        }
+
+        if (!FD_ISSET(listen_fd_, &read_fds)) {
+            continue;
+        }
+
         struct sockaddr_in client_addr;
         socklen_t addr_len = sizeof(client_addr);
 

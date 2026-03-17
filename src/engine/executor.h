@@ -2,7 +2,9 @@
 
 #include "sql/ast.h"
 #include "common/error.h"
+#include "storage/storage_engine.h"
 #include <string>
+#include <memory>
 
 namespace tinydb {
 namespace engine {
@@ -38,15 +40,23 @@ public:
     Executor();
     ~Executor();
 
-    // 执行 SQL 语句（阶段一仅返回预定义响应）
+    // 初始化执行器（传入存储引擎）
+    void initialize(storage::StorageEngine* storage_engine);
+
+    // 执行 SQL 语句
     ExecutionResult execute(const sql::AST& ast);
     ExecutionResult execute(const std::string& sql);
 
 private:
+    storage::StorageEngine* storage_engine_ = nullptr;
+
     ExecutionResult executeSelect(const sql::SelectStmt* stmt);
     ExecutionResult executeInsert(const sql::InsertStmt* stmt);
     ExecutionResult executeCreateTable(const sql::CreateTableStmt* stmt);
     ExecutionResult executeDropTable(const sql::DropTableStmt* stmt);
+
+    // 类型转换辅助函数
+    storage::DataType parseDataType(const std::string& type_str);
 };
 
 } // namespace engine

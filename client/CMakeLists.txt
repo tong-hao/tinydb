@@ -6,8 +6,8 @@ add_library(tinydb_client STATIC
 )
 
 target_link_libraries(tinydb_client
-    tinydb_network
-    tinydb_common
+    network
+    common
     Threads::Threads
 )
 
@@ -18,7 +18,7 @@ add_executable(dbclient
 
 target_link_libraries(dbclient
     tinydb_client
-    tinydb_common
+    common
 )
 
 set_target_properties(dbclient PROPERTIES
