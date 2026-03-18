@@ -16,6 +16,7 @@ class UpdateStmt;
 class DeleteStmt;
 class CreateTableStmt;
 class DropTableStmt;
+class AlterTableStmt;
 
 // AST 节点基类
 class ASTNode {
@@ -60,6 +61,105 @@ private:
     std::string value_;
 };
 
+// 操作符类型
+enum class OpType {
+    // 比较操作符
+    EQ, NE, LT, LE, GT, GE,
+    // 算术操作符
+    ADD, SUB, MUL, DIV, MOD,
+    // 逻辑操作符
+    AND, OR, NOT
+};
+
+// 二元操作表达式
+class BinaryOpExpr : public Expression {
+public:
+    BinaryOpExpr(OpType op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right)
+        : op_(op), left_(std::move(left)), right_(std::move(right)) {}
+
+    OpType op() const { return op_; }
+    const Expression* left() const { return left_.get(); }
+    const Expression* right() const { return right_.get(); }
+
+    std::string toString() const override {
+        std::string op_str;
+        switch (op_) {
+            case OpType::ADD: op_str = "+"; break;
+            case OpType::SUB: op_str = "-"; break;
+            case OpType::MUL: op_str = "*"; break;
+            case OpType::DIV: op_str = "/"; break;
+            case OpType::MOD: op_str = "%"; break;
+            default: op_str = "?"; break;
+        }
+        return "(" + left_->toString() + " " + op_str + " " + right_->toString() + ")";
+    }
+
+private:
+    OpType op_;
+    std::unique_ptr<Expression> left_;
+    std::unique_ptr<Expression> right_;
+};
+
+// 比较表达式
+class ComparisonExpr : public Expression {
+public:
+    ComparisonExpr(OpType op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right)
+        : op_(op), left_(std::move(left)), right_(std::move(right)) {}
+
+    OpType op() const { return op_; }
+    const Expression* left() const { return left_.get(); }
+    const Expression* right() const { return right_.get(); }
+
+    std::string toString() const override {
+        std::string op_str;
+        switch (op_) {
+            case OpType::EQ: op_str = "="; break;
+            case OpType::NE: op_str = "<>"; break;
+            case OpType::LT: op_str = "<"; break;
+            case OpType::LE: op_str = "<="; break;
+            case OpType::GT: op_str = ">"; break;
+            case OpType::GE: op_str = ">="; break;
+            default: op_str = "?"; break;
+        }
+        return "(" + left_->toString() + " " + op_str + " " + right_->toString() + ")";
+    }
+
+private:
+    OpType op_;
+    std::unique_ptr<Expression> left_;
+    std::unique_ptr<Expression> right_;
+};
+
+// 逻辑表达式
+class LogicalExpr : public Expression {
+public:
+    LogicalExpr(OpType op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right = nullptr)
+        : op_(op), left_(std::move(left)), right_(std::move(right)) {}
+
+    OpType op() const { return op_; }
+    const Expression* left() const { return left_.get(); }
+    const Expression* right() const { return right_.get(); }
+
+    std::string toString() const override {
+        std::string op_str;
+        switch (op_) {
+            case OpType::AND: op_str = "AND"; break;
+            case OpType::OR: op_str = "OR"; break;
+            case OpType::NOT: op_str = "NOT"; break;
+            default: op_str = "?"; break;
+        }
+        if (op_ == OpType::NOT) {
+            return "(" + op_str + " " + left_->toString() + ")";
+        }
+        return "(" + left_->toString() + " " + op_str + " " + right_->toString() + ")";
+    }
+
+private:
+    OpType op_;
+    std::unique_ptr<Expression> left_;
+    std::unique_ptr<Expression> right_;
+};
+
 // 语句基类
 class Statement : public ASTNode {
 public:
@@ -73,10 +173,16 @@ public:
         select_list_.push_back(std::move(expr));
     }
 
+    void addSelectColumn(const std::string& col) {
+        select_list_.push_back(std::make_unique<ColumnRefExpr>(col));
+    }
+
     void setFromTable(const std::string& table) { from_table_ = table; }
+    void setWhereCondition(std::unique_ptr<Expression> condition) { where_condition_ = std::move(condition); }
 
     const std::vector<std::unique_ptr<Expression>>& selectList() const { return select_list_; }
     const std::string& fromTable() const { return from_table_; }
+    Expression* whereCondition() const { return where_condition_.get(); }
 
     std::string toString() const override {
         std::string result = "SELECT ";
@@ -87,12 +193,16 @@ public:
         if (!from_table_.empty()) {
             result += " FROM " + from_table_;
         }
+        if (where_condition_) {
+            result += " WHERE " + where_condition_->toString();
+        }
         return result;
     }
 
 private:
     std::vector<std::unique_ptr<Expression>> select_list_;
     std::string from_table_;
+    std::unique_ptr<Expression> where_condition_;
 };
 
 // INSERT 语句
@@ -175,6 +285,110 @@ public:
 
 private:
     std::string table_;
+};
+
+// UPDATE 语句
+class UpdateStmt : public Statement {
+public:
+    void setTable(const std::string& table) { table_ = table; }
+    void addAssignment(const std::string& column, std::unique_ptr<Expression> value) {
+        assignments_.push_back({column, std::move(value)});
+    }
+    void setWhereCondition(std::unique_ptr<Expression> condition) { where_condition_ = std::move(condition); }
+
+    const std::string& table() const { return table_; }
+    const std::vector<std::pair<std::string, std::unique_ptr<Expression>>>& assignments() const { return assignments_; }
+    Expression* whereCondition() const { return where_condition_.get(); }
+
+    std::string toString() const override {
+        std::string result = "UPDATE " + table_ + " SET ";
+        for (size_t i = 0; i < assignments_.size(); ++i) {
+            if (i > 0) result += ", ";
+            result += assignments_[i].first + " = " + assignments_[i].second->toString();
+        }
+        if (where_condition_) {
+            result += " WHERE " + where_condition_->toString();
+        }
+        return result;
+    }
+
+private:
+    std::string table_;
+    std::vector<std::pair<std::string, std::unique_ptr<Expression>>> assignments_;
+    std::unique_ptr<Expression> where_condition_;
+};
+
+// DELETE 语句
+class DeleteStmt : public Statement {
+public:
+    void setTable(const std::string& table) { table_ = table; }
+    void setWhereCondition(std::unique_ptr<Expression> condition) { where_condition_ = std::move(condition); }
+
+    const std::string& table() const { return table_; }
+    Expression* whereCondition() const { return where_condition_.get(); }
+
+    std::string toString() const override {
+        std::string result = "DELETE FROM " + table_;
+        if (where_condition_) {
+            result += " WHERE " + where_condition_->toString();
+        }
+        return result;
+    }
+
+private:
+    std::string table_;
+    std::unique_ptr<Expression> where_condition_;
+};
+
+// ALTER TABLE 语句
+class AlterTableStmt : public Statement {
+public:
+    enum class ActionType {
+        ADD_COLUMN,
+        DROP_COLUMN,
+        MODIFY_COLUMN,
+        RENAME_TABLE
+    };
+
+    void setTable(const std::string& table) { table_ = table; }
+    void setAction(ActionType action) { action_ = action; }
+    void setNewTableName(const std::string& name) { new_table_name_ = name; }
+    void setColumnDef(const std::string& name, const std::string& type) {
+        column_name_ = name;
+        column_type_ = type;
+    }
+
+    const std::string& table() const { return table_; }
+    ActionType action() const { return action_; }
+    const std::string& newTableName() const { return new_table_name_; }
+    const std::string& columnName() const { return column_name_; }
+    const std::string& columnType() const { return column_type_; }
+
+    std::string toString() const override {
+        std::string result = "ALTER TABLE " + table_ + " ";
+        switch (action_) {
+            case ActionType::ADD_COLUMN:
+                result += "ADD COLUMN " + column_name_ + " " + column_type_;
+                break;
+            case ActionType::DROP_COLUMN:
+                result += "DROP COLUMN " + column_name_;
+                break;
+            case ActionType::MODIFY_COLUMN:
+                result += "MODIFY COLUMN " + column_name_ + " " + column_type_;
+                break;
+            case ActionType::RENAME_TABLE:
+                result += "RENAME TO " + new_table_name_;
+                break;
+        }
+        return result;
+    }
+
+private:
+    std::string table_;
+    ActionType action_;
+    std::string new_table_name_;
+    std::string column_name_;
+    std::string column_type_;
 };
 
 // AST 根节点

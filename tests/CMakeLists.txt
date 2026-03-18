@@ -6,7 +6,7 @@ add_executable(test_lexer
 )
 
 target_link_libraries(test_lexer
-    tinydb_sql
+    sql
     GTest::gtest_main
 )
 
@@ -15,7 +15,7 @@ add_executable(test_protocol
 )
 
 target_link_libraries(test_protocol
-    tinydb_network
+    network
     GTest::gtest_main
 )
 
@@ -24,7 +24,7 @@ add_executable(test_connection
 )
 
 target_link_libraries(test_connection
-    tinydb_network
+    network
     tinydb_client
     GTest::gtest_main
 )
@@ -36,8 +36,8 @@ add_executable(test_basic
 
 target_link_libraries(test_basic
     tinydb_client
-    tinydb_network
-    tinydb_engine
+    network
+    engine
     GTest::gtest_main
 )
 

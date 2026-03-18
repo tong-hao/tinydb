@@ -259,6 +259,11 @@ TokenType Lexer::getKeywordType(const std::string& word) const {
         {"show", TokenType::SHOW},
         {"databases", TokenType::DATABASES},
         {"tables", TokenType::TABLES},
+        {"alter", TokenType::ALTER},
+        {"add", TokenType::ADD},
+        {"column", TokenType::COLUMN},
+        {"modify", TokenType::MODIFY},
+        {"rename", TokenType::RENAME},
 
         // 数据类型
         {"int", TokenType::INT},
@@ -279,7 +284,7 @@ TokenType Lexer::getKeywordType(const std::string& word) const {
         {"timestamp", TokenType::TIMESTAMP},
         {"datetime", TokenType::DATETIME},
         {"boolean", TokenType::BOOLEAN},
-        {"bool", TokenType::BOOLEAN},
+        {"bool", TokenType::BOOL},
     };
 
     auto it = keywords.find(word);

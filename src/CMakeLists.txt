@@ -28,6 +28,7 @@ target_link_libraries(network
 # SQL 解析库
 add_library(sql STATIC
     sql/lexer.cpp
+    sql/parser.cpp
     sql/ast.cpp
 )
 

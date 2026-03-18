@@ -54,9 +54,18 @@ private:
     ExecutionResult executeInsert(const sql::InsertStmt* stmt);
     ExecutionResult executeCreateTable(const sql::CreateTableStmt* stmt);
     ExecutionResult executeDropTable(const sql::DropTableStmt* stmt);
+    ExecutionResult executeUpdate(const sql::UpdateStmt* stmt);
+    ExecutionResult executeDelete(const sql::DeleteStmt* stmt);
+    ExecutionResult executeAlterTable(const sql::AlterTableStmt* stmt);
 
     // 类型转换辅助函数
     storage::DataType parseDataType(const std::string& type_str);
+
+    // WHERE 条件评估
+    bool evaluateWhereCondition(const storage::Tuple& tuple, const sql::Expression* condition, const storage::Schema* schema);
+
+    // 格式化元组为字符串，支持选择特定列
+    std::string formatTuple(const storage::Tuple& tuple, const std::vector<std::unique_ptr<sql::Expression>>& select_list, const storage::Schema* schema);
 };
 
 } // namespace engine
