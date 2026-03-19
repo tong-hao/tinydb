@@ -125,7 +125,7 @@ WALManager::~WALManager() {
 }
 
 bool WALManager::initialize() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     // 检查文件是否存在
     std::ifstream test_file(log_file_path_, std::ios::binary);
@@ -287,7 +287,7 @@ LSN WALManager::logNewPage(TransactionId txn_id, uint32_t page_id) {
 }
 
 bool WALManager::flush() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     if (!file_.is_open()) {
         return false;
@@ -302,7 +302,7 @@ bool WALManager::flush() {
 }
 
 void WALManager::close() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     if (file_.is_open()) {
         flush();
@@ -311,7 +311,7 @@ void WALManager::close() {
 }
 
 bool WALManager::writeLogRecord(const LogRecord& record) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     if (!file_.is_open()) {
         return false;
@@ -341,7 +341,7 @@ LSN WALManager::getAndUpdateTxnLSN(TransactionId txn_id, LSN new_lsn) {
 }
 
 std::vector<LogRecord> WALManager::readAllLogs() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::vector<LogRecord> records;
 
     if (!file_.is_open()) {

@@ -100,7 +100,9 @@ std::unique_ptr<SelectStmt> Parser::parseSelect() {
         stmt->addSelectColumn("*");
     } else {
         while (true) {
-            if (current().type == TokenType::IDENTIFIER) {
+            if (current().type == TokenType::IDENTIFIER ||
+                current().type == TokenType::NUMBER ||
+                current().type == TokenType::STRING_LITERAL) {
                 std::string col_name = consume().value;
                 stmt->addSelectColumn(col_name);
             } else {
@@ -113,25 +115,22 @@ std::unique_ptr<SelectStmt> Parser::parseSelect() {
         }
     }
 
-    // FROM
-    if (!match(TokenType::FROM)) {
-        setError("Expected FROM");
-        return nullptr;
-    }
+    // 可选的 FROM
+    if (match(TokenType::FROM)) {
+        // 表名
+        if (current().type == TokenType::IDENTIFIER) {
+            stmt->setFromTable(consume().value);
+        } else {
+            setError("Expected table name");
+            return nullptr;
+        }
 
-    // 表名
-    if (current().type == TokenType::IDENTIFIER) {
-        stmt->setFromTable(consume().value);
-    } else {
-        setError("Expected table name");
-        return nullptr;
-    }
-
-    // 可选的 WHERE
-    if (match(TokenType::WHERE)) {
-        auto where_expr = parseExpression();
-        if (where_expr) {
-            stmt->setWhereCondition(std::move(where_expr));
+        // 可选的 WHERE
+        if (match(TokenType::WHERE)) {
+            auto where_expr = parseExpression();
+            if (where_expr) {
+                stmt->setWhereCondition(std::move(where_expr));
+            }
         }
     }
 

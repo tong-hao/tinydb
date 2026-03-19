@@ -2,7 +2,7 @@
 #include <thread>
 #include <chrono>
 #include <cstdlib>
-#include "client/dbsdk.h"
+#include "dbsdk.h"
 
 using namespace tinydb::client;
 
@@ -13,7 +13,10 @@ protected:
         server_pid_ = fork();
         if (server_pid_ == 0) {
             // 子进程：启动服务器
+            // Try multiple paths to find the server binary
+            execl("../../bin/dbserver", "dbserver", "-p", "5434", nullptr);
             execl("../bin/dbserver", "dbserver", "-p", "5434", nullptr);
+            execl("./bin/dbserver", "dbserver", "-p", "5434", nullptr);
             exit(1);
         }
 
@@ -65,6 +68,11 @@ TEST_F(IntegrationTest, ExecuteInsert) {
     Client client;
     ASSERT_TRUE(client.connect("localhost", 5434));
 
+    // First create the table
+    auto result1 = client.execute("CREATE TABLE users (id INT, name VARCHAR(32))");
+    EXPECT_TRUE(result1.success());
+
+    // Then insert into it
     auto result = client.execute("INSERT INTO users VALUES (1, 'Alice')");
     EXPECT_TRUE(result.success());
     EXPECT_NE(result.message().find("INSERT"), std::string::npos);
@@ -76,6 +84,11 @@ TEST_F(IntegrationTest, ExecuteDropTable) {
     Client client;
     ASSERT_TRUE(client.connect("localhost", 5434));
 
+    // First create the table
+    auto result1 = client.execute("CREATE TABLE users (id INT, name VARCHAR(32))");
+    EXPECT_TRUE(result1.success());
+
+    // Then drop it
     auto result = client.execute("DROP TABLE users");
     EXPECT_TRUE(result.success());
     EXPECT_NE(result.message().find("DROP"), std::string::npos);

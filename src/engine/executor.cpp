@@ -435,6 +435,7 @@ ExecutionResult Executor::executeDropTable(const sql::DropTableStmt* stmt) {
 
     if (stmt) {
         std::string table_name = stmt->table();
+
         // 检查表是否存在
         if (!storage_engine_->tableExists(table_name)) {
             return ExecutionResult::error("Table does not exist: " + table_name);

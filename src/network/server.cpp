@@ -64,22 +64,29 @@ void Server::run() {
 }
 
 void Server::stop() {
+    LOG_INFO("stop() called");
     if (!running_.exchange(false)) {
+        LOG_INFO("stop() already called, returning");
         return;
     }
 
     LOG_INFO("Stopping server...");
 
-    if (listen_fd_ >= 0) {
-        ::close(listen_fd_);
-        listen_fd_ = -1;
+    // 先关闭监听 socket，这样 acceptLoop 中的 select 会返回
+    int fd = listen_fd_;
+    listen_fd_ = -1;
+    if (fd >= 0) {
+        LOG_INFO("Closing listen_fd_: " << fd);
+        ::close(fd);
     }
 
-    // 等待所有客户端线程结束
+    // 等待所有客户端线程结束（带超时）
     std::lock_guard<std::mutex> lock(threads_mutex_);
+    LOG_INFO("Detaching " << client_threads_.size() << " client threads");
     for (auto& t : client_threads_) {
         if (t.joinable()) {
-            t.join();
+            // 使用 detach 避免阻塞主线程
+            t.detach();
         }
     }
     client_threads_.clear();
@@ -88,19 +95,27 @@ void Server::stop() {
 }
 
 void Server::acceptLoop() {
+    LOG_INFO("acceptLoop started");
     while (running_.load()) {
         // 使用 select 来检查是否有新的连接，这样可以在超时后检查 running_ 状态
         fd_set read_fds;
         FD_ZERO(&read_fds);
-        FD_SET(listen_fd_, &read_fds);
+
+        int fd = listen_fd_;
+        if (fd < 0) {
+            LOG_INFO("listen_fd_ is closed, exiting acceptLoop");
+            break;
+        }
+        FD_SET(fd, &read_fds);
 
         struct timeval timeout;
         timeout.tv_sec = 1;  // 1秒超时
         timeout.tv_usec = 0;
 
-        int ret = ::select(listen_fd_ + 1, &read_fds, nullptr, nullptr, &timeout);
+        int ret = ::select(fd + 1, &read_fds, nullptr, nullptr, &timeout);
         if (ret < 0) {
             if (errno == EINTR) {
+                LOG_DEBUG("select() interrupted by signal");
                 continue;
             }
             LOG_ERROR("select() failed: " << strerror(errno));

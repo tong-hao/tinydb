@@ -140,10 +140,21 @@ void StorageEngine::shutdown() {
     checkpoint();
 
     // 关闭组件
+    LOG_INFO("Resetting table_manager...");
     table_manager_.reset();
+    LOG_INFO("table_manager reset done");
+
+    LOG_INFO("Resetting wal_manager...");
     wal_manager_.reset();
+    LOG_INFO("wal_manager reset done");
+
+    LOG_INFO("Resetting buffer_pool...");
     buffer_pool_.reset();
+    LOG_INFO("buffer_pool reset done");
+
+    LOG_INFO("Resetting disk_manager...");
     disk_manager_.reset();
+    LOG_INFO("disk_manager reset done");
 
     initialized_ = false;
     LOG_INFO("Storage engine shutdown complete");

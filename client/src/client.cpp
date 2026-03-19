@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <unistd.h>
 #include <cstring>
 #include <atomic>
@@ -29,37 +30,40 @@ public:
 
         state_ = ConnectionState::CONNECTING;
 
-        // 创建 socket
-        socket_fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
-        if (socket_fd_ < 0) {
-            last_error_ = "Failed to create socket: " + std::string(strerror(errno));
+        // 使用 getaddrinfo 解析主机名
+        struct addrinfo hints, *res;
+        std::memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+
+        std::string port_str = std::to_string(port);
+        int status = getaddrinfo(host.c_str(), port_str.c_str(), &hints, &res);
+        if (status != 0) {
+            last_error_ = "Failed to resolve host: " + std::string(gai_strerror(status));
             state_ = ConnectionState::ERROR;
             return false;
         }
 
-        // 设置服务器地址
-        struct sockaddr_in server_addr;
-        std::memset(&server_addr, 0, sizeof(server_addr));
-        server_addr.sin_family = AF_INET;
-        server_addr.sin_port = htons(port);
-
-        if (inet_pton(AF_INET, host.c_str(), &server_addr.sin_addr) <= 0) {
-            last_error_ = "Invalid address: " + host;
-            ::close(socket_fd_);
-            socket_fd_ = -1;
+        // 创建 socket
+        socket_fd_ = ::socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+        if (socket_fd_ < 0) {
+            last_error_ = "Failed to create socket: " + std::string(strerror(errno));
+            freeaddrinfo(res);
             state_ = ConnectionState::ERROR;
             return false;
         }
 
         // 连接服务器
-        if (::connect(socket_fd_, reinterpret_cast<struct sockaddr*>(&server_addr), sizeof(server_addr)) < 0) {
+        if (::connect(socket_fd_, res->ai_addr, res->ai_addrlen) < 0) {
             last_error_ = "Connection failed: " + std::string(strerror(errno));
             ::close(socket_fd_);
             socket_fd_ = -1;
+            freeaddrinfo(res);
             state_ = ConnectionState::ERROR;
             return false;
         }
 
+        freeaddrinfo(res);
         state_ = ConnectionState::CONNECTED;
         return true;
     }

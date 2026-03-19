@@ -23,6 +23,10 @@ add_executable(test_connection
     unit/test_connection.cpp
 )
 
+target_include_directories(test_connection PRIVATE
+    ${CMAKE_SOURCE_DIR}/client/include
+)
+
 target_link_libraries(test_connection
     network
     tinydb_client
@@ -32,6 +36,10 @@ target_link_libraries(test_connection
 # 集成测试
 add_executable(test_basic
     integration/test_basic.cpp
+)
+
+target_include_directories(test_basic PRIVATE
+    ${CMAKE_SOURCE_DIR}/client/include
 )
 
 target_link_libraries(test_basic

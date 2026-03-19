@@ -5,6 +5,10 @@ add_library(tinydb_client STATIC
     src/client.cpp
 )
 
+target_include_directories(tinydb_client PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
 target_link_libraries(tinydb_client
     network
     common

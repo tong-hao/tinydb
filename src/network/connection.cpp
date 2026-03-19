@@ -1,6 +1,8 @@
 #include "connection.h"
 #include <errno.h>
 #include <string.h>
+#include <sys/select.h>
+#include <fcntl.h>
 
 namespace tinydb {
 namespace network {
@@ -9,6 +11,11 @@ Connection::Connection(int socket_fd)
     : socket_fd_(socket_fd)
     , state_(ConnectionState::CONNECTED) {
     LOG_DEBUG("Connection created, fd=" << socket_fd_);
+    // 设置 socket 为非阻塞模式，以便可以检查 running_ 状态
+    int flags = fcntl(socket_fd_, F_GETFL, 0);
+    if (flags >= 0) {
+        fcntl(socket_fd_, F_SETFL, flags | O_NONBLOCK);
+    }
 }
 
 Connection::~Connection() {
@@ -46,6 +53,33 @@ void Connection::run() {
     LOG_INFO("Connection started processing, fd=" << socket_fd_);
 
     while (state_.load() == ConnectionState::CONNECTED) {
+        // 使用 select 检查是否有数据可读，设置超时以便可以检查 state_
+        fd_set read_fds;
+        FD_ZERO(&read_fds);
+        FD_SET(socket_fd_, &read_fds);
+
+        struct timeval timeout;
+        timeout.tv_sec = 1;  // 1秒超时
+        timeout.tv_usec = 0;
+
+        int ret = ::select(socket_fd_ + 1, &read_fds, nullptr, nullptr, &timeout);
+        if (ret < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            LOG_ERROR("select() failed: " << strerror(errno));
+            break;
+        }
+
+        if (ret == 0) {
+            // 超时，继续循环检查 state_
+            continue;
+        }
+
+        if (!FD_ISSET(socket_fd_, &read_fds)) {
+            continue;
+        }
+
         MessageType type;
         buffer_t body;
 
@@ -53,6 +87,11 @@ void Connection::run() {
         if (err.failed()) {
             if (err.code() == ErrorCode::E_CONNECTION_CLOSED) {
                 LOG_INFO("Connection closed by peer, fd=" << socket_fd_);
+            } else if (err.code() == ErrorCode::E_NETWORK_ERROR &&
+                       (err.toString().find("Resource temporarily unavailable") != std::string::npos ||
+                        err.toString().find("EAGAIN") != std::string::npos)) {
+                // 非阻塞模式下没有数据可读，继续循环
+                continue;
             } else {
                 LOG_ERROR("Read message error: " << err.toString());
             }
@@ -134,6 +173,10 @@ Error Connection::readExact(byte_t* buffer, size_t length) {
         if (n < 0) {
             if (errno == EINTR) {
                 continue;
+            }
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // 非阻塞模式下没有数据可读
+                return Error(ErrorCode::E_NETWORK_ERROR, "EAGAIN");
             }
             return Error(ErrorCode::E_NETWORK_ERROR, strerror(errno));
         }

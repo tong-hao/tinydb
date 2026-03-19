@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include "sql/ast.h"
 #include "sql/lexer.h"
-#include "sql/parser.hpp"
+#include "sql/parser.h"
 
 using namespace tinydb;
 using namespace tinydb::sql;
@@ -14,18 +14,10 @@ protected:
 
     // 辅助函数：解析 SQL 并返回 AST
     std::unique_ptr<AST> parseSQL(const std::string& sql) {
-        yyscan_t scanner;
-        yylex_init(&scanner);
-
-        YY_BUFFER_STATE buffer = yy_scan_string(sql.c_str(), scanner);
-
-        AST* ast = nullptr;
-        yyparse(scanner, &ast);
-
-        yy_delete_buffer(buffer, scanner);
-        yylex_destroy(scanner);
-
-        return std::unique_ptr<AST>(ast);
+        Lexer lexer(sql);
+        auto tokens = lexer.tokenize();
+        Parser parser(tokens);
+        return parser.parse();
     }
 };
 

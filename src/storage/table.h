@@ -149,6 +149,12 @@ private:
 
     // 查找或创建数据页以插入
     PageId findPageForInsert(uint32_t tuple_size);
+
+    // 内部使用：插入元组到指定表（调用者必须已持有锁）
+    TID insertTupleInternal(TableMeta* meta, const Tuple& tuple);
+
+    // 内部使用：获取表元数据（调用者必须已持有锁）
+    std::shared_ptr<TableMeta> getTableUnlocked(const std::string& table_name);
 };
 
 } // namespace storage

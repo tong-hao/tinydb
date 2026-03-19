@@ -137,7 +137,7 @@ public:
 private:
     std::string log_file_path_;
     std::fstream file_;
-    std::mutex mutex_;
+    std::recursive_mutex mutex_;
     std::atomic<LSN> current_lsn_{INVALID_LSN};
     std::atomic<LSN> flushed_lsn_{INVALID_LSN};
 

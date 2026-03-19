@@ -1,5 +1,6 @@
 #include "table.h"
 #include "common/logger.h"
+#include "common/string_utils.h"
 #include <cstring>
 
 namespace tinydb {
@@ -327,13 +328,13 @@ bool TableManager::initializeSystemTables() {
     // 分配pg_class和pg_attribute的表ID
     pg_class_meta_ = std::make_shared<TableMeta>();
     pg_class_meta_->table_id = 0;  // 系统表ID从0开始
-    pg_class_meta_->table_name = "pg_class";
+    pg_class_meta_->table_name = common::toLower("pg_class");
     pg_class_meta_->schema_name = "pg_catalog";
     pg_class_meta_->schema = pg_class_schema;
 
     pg_attribute_meta_ = std::make_shared<TableMeta>();
     pg_attribute_meta_->table_id = 1;
-    pg_attribute_meta_->table_name = "pg_attribute";
+    pg_attribute_meta_->table_name = common::toLower("pg_attribute");
     pg_attribute_meta_->schema_name = "pg_catalog";
     pg_attribute_meta_->schema = pg_attribute_schema;
 
@@ -373,7 +374,7 @@ bool TableManager::initializeSystemTables() {
 bool TableManager::createTable(const std::string& table_name, const Schema& schema) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (tables_.find(table_name) != tables_.end()) {
+    if (tables_.find(common::toLower(table_name)) != tables_.end()) {
         LOG_ERROR("Table already exists: " << table_name);
         return false;
     }
@@ -390,7 +391,7 @@ bool TableManager::createTable(const std::string& table_name, const Schema& sche
     // 创建表元数据
     auto meta = std::make_shared<TableMeta>();
     meta->table_id = next_table_id_++;
-    meta->table_name = table_name;
+    meta->table_name = common::toLower(table_name);
     meta->schema_name = "public";
     meta->first_page_id = first_page;
     meta->last_page_id = first_page;
@@ -422,7 +423,7 @@ bool TableManager::createTable(const std::string& table_name, const Schema& sche
 bool TableManager::dropTable(const std::string& table_name) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    auto it = tables_.find(table_name);
+    auto it = tables_.find(common::toLower(table_name));
     if (it == tables_.end()) {
         LOG_ERROR("Table not found: " << table_name);
         return false;
@@ -444,15 +445,24 @@ bool TableManager::dropTable(const std::string& table_name) {
 
     // 释放所有数据页
     PageId page_id = meta->first_page_id;
+    int page_count = 0;
     while (page_id != INVALID_PAGE_ID) {
         BufferFrame* frame = buffer_pool_->fetchPage(page_id);
-        if (!frame) break;
+        if (!frame) {
+            LOG_ERROR("Failed to fetch page " << page_id << " during drop table");
+            break;
+        }
 
         PageId next_page = frame->getPage().header().next_page_id;
         buffer_pool_->unpinPage(page_id, false);
         buffer_pool_->deletePage(page_id);
 
         page_id = next_page;
+        page_count++;
+        if (page_count > 1000) {
+            LOG_ERROR("Too many pages during drop table, possible infinite loop");
+            break;
+        }
     }
 
     tables_.erase(it);
@@ -463,7 +473,7 @@ bool TableManager::dropTable(const std::string& table_name) {
 std::shared_ptr<TableMeta> TableManager::getTable(const std::string& table_name) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    auto it = tables_.find(table_name);
+    auto it = tables_.find(common::toLower(table_name));
     if (it != tables_.end()) {
         return it->second;
     }
@@ -472,7 +482,7 @@ std::shared_ptr<TableMeta> TableManager::getTable(const std::string& table_name)
 
 bool TableManager::tableExists(const std::string& table_name) {
     std::lock_guard<std::mutex> lock(mutex_);
-    return tables_.find(table_name) != tables_.end();
+    return tables_.find(common::toLower(table_name)) != tables_.end();
 }
 
 std::vector<std::string> TableManager::getAllTableNames() {
@@ -603,7 +613,8 @@ TableIterator TableManager::makeIterator(const std::string& table_name) {
 }
 
 bool TableManager::saveTableMeta(const TableMeta& meta) {
-    // 插入到pg_class
+    // 直接操作 pg_class 而不调用 insertTuple 以避免死锁
+    // 序列化元组
     Tuple tuple(&pg_class_meta_->schema);
     auto data = meta.serialize();
 
@@ -618,26 +629,105 @@ bool TableManager::saveTableMeta(const TableMeta& meta) {
     tuple.addField(Field(static_cast<int32_t>(meta.next_tuple_id)));
     tuple.addField(Field(std::string(reinterpret_cast<const char*>(data.data()), data.size()), DataType::VARCHAR));
 
-    TID tid = insertTuple("pg_class", tuple);
-    return tid.isValid();
-}
-
-bool TableManager::removeTableMeta(const std::string& table_name) {
-    // 遍历pg_class找到并删除对应记录
-    TableIterator iter = makeIterator("pg_class");
-    while (iter.hasNext()) {
-        Tuple tuple = iter.getNext();
-        if (tuple.getFieldCount() >= 2) {
-            std::string name = tuple.getField(1).getString();
-            if (name == table_name) {
-                return deleteTuple("pg_class", iter.getCurrentTID());
-            }
-        }
+    auto tuple_data = tuple.serialize();
+    if (tuple_data.empty()) {
+        LOG_ERROR("Failed to serialize table meta tuple");
+        return false;
     }
+
+    // 查找或创建数据页
+    PageId page_id = pg_class_meta_->last_page_id;
+    BufferFrame* frame = buffer_pool_->fetchPage(page_id);
+
+    if (!frame) {
+        LOG_ERROR("Failed to fetch page " << page_id);
+        return false;
+    }
+
+    // 检查页是否有足够空间
+    if (!frame->getPage().hasEnoughSpace(static_cast<uint16_t>(tuple_data.size()))) {
+        // 当前页已满，分配新页
+        buffer_pool_->unpinPage(page_id, false);
+
+        PageId new_page_id;
+        frame = buffer_pool_->newPage(&new_page_id);
+        if (!frame) {
+            LOG_ERROR("Failed to allocate new page");
+            return false;
+        }
+
+        // 链接新页
+        BufferFrame* last_frame = buffer_pool_->fetchPage(page_id);
+        if (last_frame) {
+            last_frame->getPage().header().next_page_id = new_page_id;
+            buffer_pool_->unpinPage(page_id, true);
+        }
+
+        pg_class_meta_->last_page_id = new_page_id;
+        pg_class_meta_->page_count++;
+        page_id = new_page_id;
+    }
+
+    // 插入元组
+    uint16_t slot_id = frame->getPage().insertTuple(
+        reinterpret_cast<const char*>(tuple_data.data()),
+        static_cast<uint16_t>(tuple_data.size())
+    );
+
+    buffer_pool_->unpinPage(page_id, true);
+
+    pg_class_meta_->tuple_count++;
+
+    LOG_DEBUG("Saved table meta at (" << page_id << ", " << slot_id << ")");
     return true;
 }
 
+bool TableManager::removeTableMeta(const std::string& table_name) {
+    // 直接遍历 pg_class 找到并删除对应记录，不调用 makeIterator/deleteTuple 以避免死锁
+    PageId page_id = pg_class_meta_->first_page_id;
+    std::string target_name = common::toLower(table_name);
+
+    while (page_id != INVALID_PAGE_ID) {
+        BufferFrame* frame = buffer_pool_->fetchPage(page_id);
+        if (!frame) break;
+
+        Page& page = frame->getPage();
+        uint16_t slot_count = page.getSlotCount();
+
+        for (uint16_t slot_id = 0; slot_id < slot_count; ++slot_id) {
+            // 获取元组数据
+            const char* tuple_data = page.getTupleData(slot_id);
+            uint16_t tuple_len = page.getTupleLength(slot_id);
+
+            if (tuple_data && tuple_len > 0) {
+                // 反序列化元组获取表名（第2个字段，索引1）
+                Tuple tuple(&pg_class_meta_->schema);
+                if (tuple.deserialize(reinterpret_cast<const uint8_t*>(tuple_data), tuple_len)) {
+                    if (tuple.getFieldCount() >= 2) {
+                        std::string name = tuple.getField(1).getString();
+                        if (common::toLower(name) == target_name) {
+                            // 删除此元组
+                            page.deleteTuple(slot_id);
+                            buffer_pool_->unpinPage(page_id, true);
+                            pg_class_meta_->tuple_count--;
+                            LOG_DEBUG("Removed table meta for: " << table_name);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        PageId next_page = page.header().next_page_id;
+        buffer_pool_->unpinPage(page_id, false);
+        page_id = next_page;
+    }
+
+    return true;  // 表可能不存在，不报错
+}
+
 bool TableManager::saveColumnMeta(const ColumnMeta& meta) {
+    // 直接操作 pg_attribute 而不调用 insertTuple 以避免死锁
     Tuple tuple(&pg_attribute_meta_->schema);
 
     tuple.addField(Field(static_cast<int32_t>(meta.table_id)));
@@ -649,22 +739,99 @@ bool TableManager::saveColumnMeta(const ColumnMeta& meta) {
     tuple.addField(Field(meta.is_primary_key));
     tuple.addField(Field(meta.default_value_offset));
 
-    TID tid = insertTuple("pg_attribute", tuple);
-    return tid.isValid();
+    auto tuple_data = tuple.serialize();
+    if (tuple_data.empty()) {
+        LOG_ERROR("Failed to serialize column meta tuple");
+        return false;
+    }
+
+    // 查找或创建数据页
+    PageId page_id = pg_attribute_meta_->last_page_id;
+    BufferFrame* frame = buffer_pool_->fetchPage(page_id);
+
+    if (!frame) {
+        LOG_ERROR("Failed to fetch page " << page_id);
+        return false;
+    }
+
+    // 检查页是否有足够空间
+    if (!frame->getPage().hasEnoughSpace(static_cast<uint16_t>(tuple_data.size()))) {
+        // 当前页已满，分配新页
+        buffer_pool_->unpinPage(page_id, false);
+
+        PageId new_page_id;
+        frame = buffer_pool_->newPage(&new_page_id);
+        if (!frame) {
+            LOG_ERROR("Failed to allocate new page");
+            return false;
+        }
+
+        // 链接新页
+        BufferFrame* last_frame = buffer_pool_->fetchPage(page_id);
+        if (last_frame) {
+            last_frame->getPage().header().next_page_id = new_page_id;
+            buffer_pool_->unpinPage(page_id, true);
+        }
+
+        pg_attribute_meta_->last_page_id = new_page_id;
+        pg_attribute_meta_->page_count++;
+        page_id = new_page_id;
+    }
+
+    // 插入元组
+    uint16_t slot_id = frame->getPage().insertTuple(
+        reinterpret_cast<const char*>(tuple_data.data()),
+        static_cast<uint16_t>(tuple_data.size())
+    );
+
+    buffer_pool_->unpinPage(page_id, true);
+
+    pg_attribute_meta_->tuple_count++;
+
+    LOG_DEBUG("Saved column meta at (" << page_id << ", " << slot_id << ")");
+    return true;
 }
 
 bool TableManager::removeColumnMeta(uint32_t table_id) {
-    // 遍历pg_attribute找到并删除对应记录
-    TableIterator iter = makeIterator("pg_attribute");
-    while (iter.hasNext()) {
-        Tuple tuple = iter.getNext();
-        if (tuple.getFieldCount() >= 1) {
-            int32_t tid = tuple.getField(0).getInt32();
-            if (static_cast<uint32_t>(tid) == table_id) {
-                deleteTuple("pg_attribute", iter.getCurrentTID());
+    // 直接遍历 pg_attribute 找到并删除对应记录，不调用 makeIterator/deleteTuple 以避免死锁
+    PageId page_id = pg_attribute_meta_->first_page_id;
+
+    while (page_id != INVALID_PAGE_ID) {
+        BufferFrame* frame = buffer_pool_->fetchPage(page_id);
+        if (!frame) break;
+
+        Page& page = frame->getPage();
+        uint16_t slot_count = page.getSlotCount();
+        bool page_modified = false;
+
+        // 从后向前遍历，这样删除不会影响未遍历的索引
+        for (int16_t slot_id = static_cast<int16_t>(slot_count) - 1; slot_id >= 0; --slot_id) {
+            // 获取元组数据
+            const char* tuple_data = page.getTupleData(static_cast<uint16_t>(slot_id));
+            uint16_t tuple_len = page.getTupleLength(static_cast<uint16_t>(slot_id));
+
+            if (tuple_data && tuple_len > 0) {
+                // 反序列化元组获取 table_id（第1个字段，索引0）
+                Tuple tuple(&pg_attribute_meta_->schema);
+                if (tuple.deserialize(reinterpret_cast<const uint8_t*>(tuple_data), tuple_len)) {
+                    if (tuple.getFieldCount() >= 1) {
+                        int32_t tid = tuple.getField(0).getInt32();
+                        if (static_cast<uint32_t>(tid) == table_id) {
+                            // 删除此元组
+                            page.deleteTuple(static_cast<uint16_t>(slot_id));
+                            page_modified = true;
+                            pg_attribute_meta_->tuple_count--;
+                        }
+                    }
+                }
             }
         }
+
+        PageId next_page = page.header().next_page_id;
+        buffer_pool_->unpinPage(page_id, page_modified);
+        page_id = next_page;
     }
+
     return true;
 }
 
