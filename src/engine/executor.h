@@ -49,6 +49,7 @@ public:
 
 private:
     storage::StorageEngine* storage_engine_ = nullptr;
+    storage::Transaction* current_txn_ = nullptr;  // 当前事务（阶段三新增）
 
     ExecutionResult executeSelect(const sql::SelectStmt* stmt);
     ExecutionResult executeInsert(const sql::InsertStmt* stmt);
@@ -57,6 +58,9 @@ private:
     ExecutionResult executeUpdate(const sql::UpdateStmt* stmt);
     ExecutionResult executeDelete(const sql::DeleteStmt* stmt);
     ExecutionResult executeAlterTable(const sql::AlterTableStmt* stmt);
+    ExecutionResult executeBegin(const sql::BeginStmt* stmt);      // 新增
+    ExecutionResult executeCommit(const sql::CommitStmt* stmt);    // 新增
+    ExecutionResult executeRollback(const sql::RollbackStmt* stmt); // 新增
 
     // 类型转换辅助函数
     storage::DataType parseDataType(const std::string& type_str);
@@ -66,6 +70,15 @@ private:
 
     // 格式化元组为字符串，支持选择特定列
     std::string formatTuple(const storage::Tuple& tuple, const std::vector<std::unique_ptr<sql::Expression>>& select_list, const storage::Schema* schema);
+
+    // 表达式求值（阶段三新增：支持算术运算）
+    storage::Field evaluateExpression(const sql::Expression* expr, const storage::Tuple& tuple, const storage::Schema* schema);
+
+    // 获取表锁（阶段三新增）
+    bool acquireTableLock(const std::string& table_name, storage::LockType lock_type);
+
+    // 释放表锁（阶段三新增）
+    bool releaseTableLock(const std::string& table_name);
 };
 
 } // namespace engine

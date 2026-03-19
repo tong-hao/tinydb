@@ -43,6 +43,12 @@ ExecutionResult Executor::execute(const sql::AST& ast) {
         return executeDelete(delete_stmt);
     } else if (auto alter_stmt = dynamic_cast<const sql::AlterTableStmt*>(stmt)) {
         return executeAlterTable(alter_stmt);
+    } else if (auto begin_stmt = dynamic_cast<const sql::BeginStmt*>(stmt)) {
+        return executeBegin(begin_stmt);
+    } else if (auto commit_stmt = dynamic_cast<const sql::CommitStmt*>(stmt)) {
+        return executeCommit(commit_stmt);
+    } else if (auto rollback_stmt = dynamic_cast<const sql::RollbackStmt*>(stmt)) {
+        return executeRollback(rollback_stmt);
     }
 
     return ExecutionResult::error("Unsupported statement type");
@@ -317,6 +323,24 @@ ExecutionResult Executor::executeInsert(const sql::InsertStmt* stmt) {
             return ExecutionResult::error("Failed to get table metadata: " + table_name);
         }
 
+        // 获取或开始事务
+        storage::Transaction* txn = current_txn_;
+        bool auto_txn = false;
+        if (!txn) {
+            txn = storage_engine_->beginTransaction();
+            current_txn_ = txn;  // 设置当前事务
+            auto_txn = true;
+        }
+
+        // 获取排他锁（写锁）
+        if (!acquireTableLock(table_name, storage::LockType::EXCLUSIVE)) {
+            if (auto_txn) {
+                storage_engine_->abortTransaction(txn);
+                current_txn_ = nullptr;
+            }
+            return ExecutionResult::error("Failed to acquire lock on table: " + table_name);
+        }
+
         // 构建元组
         storage::Tuple tuple(&table_meta->schema);
         const auto& values = stmt->values();
@@ -332,6 +356,11 @@ ExecutionResult Executor::executeInsert(const sql::InsertStmt* stmt) {
                 if (i < columns.size()) {
                     col_idx = table_meta->schema.findColumnIndex(columns[i]);
                     if (col_idx == static_cast<size_t>(-1)) {
+                        releaseTableLock(table_name);
+                        if (auto_txn) {
+                            storage_engine_->abortTransaction(txn);
+                            current_txn_ = nullptr;
+                        }
                         return ExecutionResult::error("Unknown column: " + columns[i]);
                     }
                 }
@@ -375,11 +404,33 @@ ExecutionResult Executor::executeInsert(const sql::InsertStmt* stmt) {
 
         // 插入数据
         auto tid = storage_engine_->insert(table_name, tuple);
-        if (tid.isValid()) {
-            return ExecutionResult::ok("INSERT 1 row at " + tid.toString());
-        } else {
+
+        // 释放锁
+        releaseTableLock(table_name);
+
+        if (!tid.isValid()) {
+            if (auto_txn) {
+                storage_engine_->abortTransaction(txn);
+                current_txn_ = nullptr;
+            }
             return ExecutionResult::error("Failed to insert row");
         }
+
+        // 记录插入（用于回滚）
+        if (txn) {
+            txn->addInsertRecord(table_name, tid);
+        }
+
+        // 如果没有显式事务，自动提交
+        if (auto_txn) {
+            if (!storage_engine_->commitTransaction(txn)) {
+                current_txn_ = nullptr;
+                return ExecutionResult::error("Failed to commit insert");
+            }
+            current_txn_ = nullptr;
+        }
+
+        return ExecutionResult::ok("INSERT 1 row at " + tid.toString());
     }
 
     return ExecutionResult::ok("INSERT executed");
@@ -470,6 +521,24 @@ ExecutionResult Executor::executeUpdate(const sql::UpdateStmt* stmt) {
             return ExecutionResult::error("Failed to get table metadata: " + table_name);
         }
 
+        // 获取或开始事务
+        storage::Transaction* txn = current_txn_;
+        bool auto_txn = false;
+        if (!txn) {
+            txn = storage_engine_->beginTransaction();
+            current_txn_ = txn;
+            auto_txn = true;
+        }
+
+        // 获取排他锁（写锁）
+        if (!acquireTableLock(table_name, storage::LockType::EXCLUSIVE)) {
+            if (auto_txn) {
+                storage_engine_->abortTransaction(txn);
+                current_txn_ = nullptr;
+            }
+            return ExecutionResult::error("Failed to acquire lock on table: " + table_name);
+        }
+
         // 获取 WHERE 条件
         const sql::Expression* where_condition = stmt->whereCondition();
 
@@ -504,6 +573,11 @@ ExecutionResult Executor::executeUpdate(const sql::UpdateStmt* stmt) {
 
                 int col_idx = table_meta->schema.findColumnIndex(col_name);
                 if (col_idx < 0) {
+                    releaseTableLock(table_name);
+                    if (auto_txn) {
+                        storage_engine_->abortTransaction(txn);
+                        current_txn_ = nullptr;
+                    }
                     return ExecutionResult::error("Unknown column: " + col_name);
                 }
 
@@ -543,18 +617,40 @@ ExecutionResult Executor::executeUpdate(const sql::UpdateStmt* stmt) {
                             break;
                     }
                 } else {
+                    releaseTableLock(table_name);
+                    if (auto_txn) {
+                        storage_engine_->abortTransaction(txn);
+                        current_txn_ = nullptr;
+                    }
                     return ExecutionResult::error("Unsupported value expression in UPDATE");
                 }
 
                 updated_tuple.setField(col_idx, field);
             }
 
-            // 删除旧元组并插入新元组
-            // 注意：这里简化处理，实际应该支持原地更新
-            storage_engine_->remove(table_name, tid);
-            storage_engine_->insert(table_name, updated_tuple);
+            // 使用存储引擎的 update 方法
+            if (!storage_engine_->update(table_name, tid, updated_tuple)) {
+                releaseTableLock(table_name);
+                if (auto_txn) {
+                    storage_engine_->abortTransaction(txn);
+                    current_txn_ = nullptr;
+                }
+                return ExecutionResult::error("Failed to update row");
+            }
 
             update_count++;
+        }
+
+        // 释放锁
+        releaseTableLock(table_name);
+
+        // 如果没有显式事务，自动提交
+        if (auto_txn) {
+            if (!storage_engine_->commitTransaction(txn)) {
+                current_txn_ = nullptr;
+                return ExecutionResult::error("Failed to commit update");
+            }
+            current_txn_ = nullptr;
         }
 
         return ExecutionResult::ok("UPDATE " + std::to_string(update_count) + " row(s) in table " + table_name);
@@ -581,6 +677,24 @@ ExecutionResult Executor::executeDelete(const sql::DeleteStmt* stmt) {
             return ExecutionResult::error("Failed to get table metadata: " + table_name);
         }
 
+        // 获取或开始事务
+        storage::Transaction* txn = current_txn_;
+        bool auto_txn = false;
+        if (!txn) {
+            txn = storage_engine_->beginTransaction();
+            current_txn_ = txn;
+            auto_txn = true;
+        }
+
+        // 获取排他锁（写锁）
+        if (!acquireTableLock(table_name, storage::LockType::EXCLUSIVE)) {
+            if (auto_txn) {
+                storage_engine_->abortTransaction(txn);
+                current_txn_ = nullptr;
+            }
+            return ExecutionResult::error("Failed to acquire lock on table: " + table_name);
+        }
+
         // 获取 WHERE 条件
         const sql::Expression* where_condition = stmt->whereCondition();
 
@@ -597,10 +711,27 @@ ExecutionResult Executor::executeDelete(const sql::DeleteStmt* stmt) {
                 continue;
             }
 
+            // 记录删除（用于回滚）
+            if (txn) {
+                txn->addDeleteRecord(table_name, tuple, tid);
+            }
+
             // 删除元组
             if (storage_engine_->remove(table_name, tid)) {
                 delete_count++;
             }
+        }
+
+        // 释放锁
+        releaseTableLock(table_name);
+
+        // 如果没有显式事务，自动提交
+        if (auto_txn) {
+            if (!storage_engine_->commitTransaction(txn)) {
+                current_txn_ = nullptr;
+                return ExecutionResult::error("Failed to commit delete");
+            }
+            current_txn_ = nullptr;
         }
 
         return ExecutionResult::ok("DELETE " + std::to_string(delete_count) + " row(s) from table " + table_name);
@@ -659,6 +790,148 @@ storage::DataType Executor::parseDataType(const std::string& type_str) {
 
     // 默认类型
     return storage::DataType::VARCHAR;
+}
+
+// 表达式求值（阶段三新增：支持算术运算）
+storage::Field Executor::evaluateExpression(const sql::Expression* expr, const storage::Tuple& tuple, const storage::Schema* schema) {
+    if (!expr) {
+        return storage::Field();
+    }
+
+    // 处理字面量
+    if (auto literal = dynamic_cast<const sql::LiteralExpr*>(expr)) {
+        std::string val = literal->value();
+        // 去除引号
+        if (val.size() >= 2 && val.front() == '\'' && val.back() == '\'') {
+            val = val.substr(1, val.size() - 2);
+        }
+        // 尝试解析为数字
+        try {
+            return storage::Field(static_cast<int64_t>(std::stoll(val)));
+        } catch (...) {
+            return storage::Field(val, storage::DataType::VARCHAR);
+        }
+    }
+
+    // 处理列引用
+    if (auto col_ref = dynamic_cast<const sql::ColumnRefExpr*>(expr)) {
+        int col_idx = schema->findColumnIndex(col_ref->columnName());
+        if (col_idx >= 0) {
+            return tuple.getField(col_idx);
+        }
+        return storage::Field();
+    }
+
+    // 处理二元操作表达式
+    if (auto binary_expr = dynamic_cast<const sql::BinaryOpExpr*>(expr)) {
+        auto left_val = evaluateExpression(binary_expr->left(), tuple, schema);
+        auto right_val = evaluateExpression(binary_expr->right(), tuple, schema);
+
+        // 获取数值
+        int64_t left_num = 0, right_num = 0;
+        try {
+            left_num = std::stoll(left_val.toString());
+        } catch (...) {}
+        try {
+            right_num = std::stoll(right_val.toString());
+        } catch (...) {}
+
+        switch (binary_expr->op()) {
+            case sql::OpType::ADD:
+                return storage::Field(left_num + right_num);
+            case sql::OpType::SUB:
+                return storage::Field(left_num - right_num);
+            case sql::OpType::MUL:
+                return storage::Field(left_num * right_num);
+            case sql::OpType::DIV:
+                if (right_num != 0) {
+                    return storage::Field(left_num / right_num);
+                }
+                return storage::Field(0);
+            default:
+                return storage::Field();
+        }
+    }
+
+    return storage::Field();
+}
+
+// 事务执行方法（阶段三新增）
+ExecutionResult Executor::executeBegin(const sql::BeginStmt* stmt) {
+    if (!storage_engine_) {
+        return ExecutionResult::error("No storage engine");
+    }
+
+    if (current_txn_) {
+        return ExecutionResult::error("Transaction already in progress");
+    }
+
+    current_txn_ = storage_engine_->beginTransaction();
+    if (!current_txn_) {
+        return ExecutionResult::error("Failed to begin transaction");
+    }
+
+    LOG_INFO("Transaction started: " << current_txn_->getId());
+    return ExecutionResult::ok("BEGIN");
+}
+
+ExecutionResult Executor::executeCommit(const sql::CommitStmt* stmt) {
+    if (!storage_engine_) {
+        return ExecutionResult::error("No storage engine");
+    }
+
+    if (!current_txn_) {
+        return ExecutionResult::error("No active transaction");
+    }
+
+    if (storage_engine_->commitTransaction(current_txn_)) {
+        LOG_INFO("Transaction committed: " << current_txn_->getId());
+        current_txn_ = nullptr;
+        return ExecutionResult::ok("COMMIT");
+    }
+
+    return ExecutionResult::error("Failed to commit transaction");
+}
+
+ExecutionResult Executor::executeRollback(const sql::RollbackStmt* stmt) {
+    if (!storage_engine_) {
+        return ExecutionResult::error("No storage engine");
+    }
+
+    if (!current_txn_) {
+        return ExecutionResult::error("No active transaction");
+    }
+
+    if (storage_engine_->abortTransaction(current_txn_)) {
+        LOG_INFO("Transaction rolled back: " << current_txn_->getId());
+        current_txn_ = nullptr;
+        return ExecutionResult::ok("ROLLBACK");
+    }
+
+    return ExecutionResult::error("Failed to rollback transaction");
+}
+
+// 锁管理辅助方法（阶段三新增）
+bool Executor::acquireTableLock(const std::string& table_name, storage::LockType lock_type) {
+    if (!storage_engine_) {
+        return false;
+    }
+
+    // 如果没有活跃事务，无法获取锁
+    if (!current_txn_) {
+        LOG_ERROR("Cannot acquire lock without active transaction");
+        return false;
+    }
+
+    return storage_engine_->lockTable(current_txn_, table_name, lock_type);
+}
+
+bool Executor::releaseTableLock(const std::string& table_name) {
+    if (!storage_engine_ || !current_txn_) {
+        return false;
+    }
+
+    return storage_engine_->unlockTable(current_txn_, table_name);
 }
 
 } // namespace engine

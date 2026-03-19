@@ -7,6 +7,8 @@ set(STORAGE_SOURCES
     tuple.cpp
     table.cpp
     wal.cpp
+    transaction.cpp
+    lock_manager.cpp
     storage_engine.cpp
 )
 
@@ -17,6 +19,8 @@ set(STORAGE_HEADERS
     tuple.h
     table.h
     wal.h
+    transaction.h
+    lock_manager.h
     storage_engine.h
 )
 

@@ -80,6 +80,12 @@ std::unique_ptr<Statement> Parser::parseStatement() {
         return parseDropTable();
     } else if (current().type == TokenType::ALTER) {
         return parseAlterTable();
+    } else if (current().type == TokenType::BEGIN) {
+        return parseBegin();
+    } else if (current().type == TokenType::COMMIT) {
+        return parseCommit();
+    } else if (current().type == TokenType::ROLLBACK) {
+        return parseRollback();
     }
     setError("Unknown statement type: " + current().value);
     return nullptr;
@@ -594,6 +600,38 @@ std::unique_ptr<Expression> Parser::parsePrimaryExpression() {
 
     setError("Unexpected token: " + current().value);
     return nullptr;
+}
+
+// 事务语句解析（阶段三新增）
+std::unique_ptr<BeginStmt> Parser::parseBegin() {
+    if (!match(TokenType::BEGIN)) {
+        setError("Expected BEGIN");
+        return nullptr;
+    }
+    // 可选的 TRANSACTION 关键字
+    match(TokenType::TRANSACTION);
+    return std::make_unique<BeginStmt>();
+}
+
+std::unique_ptr<CommitStmt> Parser::parseCommit() {
+    if (!match(TokenType::COMMIT)) {
+        setError("Expected COMMIT");
+        return nullptr;
+    }
+    // 可选的 TRANSACTION 关键字
+    match(TokenType::TRANSACTION);
+    return std::make_unique<CommitStmt>();
+}
+
+std::unique_ptr<RollbackStmt> Parser::parseRollback() {
+    if (!match(TokenType::ROLLBACK)) {
+        setError("Expected ROLLBACK");
+        return nullptr;
+    }
+    // 可选的 TRANSACTION 关键字
+    match(TokenType::TRANSACTION);
+    // 可选的 TO SAVEPOINT xxx（暂不实现）
+    return std::make_unique<RollbackStmt>();
 }
 
 } // namespace sql

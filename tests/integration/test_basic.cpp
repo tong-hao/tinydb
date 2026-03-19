@@ -9,14 +9,17 @@ using namespace tinydb::client;
 class IntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
+        // 创建数据目录
+        system("mkdir -p /tmp/tinydb_test_data");
+
         // 启动服务器进程
         server_pid_ = fork();
         if (server_pid_ == 0) {
             // 子进程：启动服务器
             // Try multiple paths to find the server binary
-            execl("../../bin/dbserver", "dbserver", "-p", "5434", nullptr);
-            execl("../bin/dbserver", "dbserver", "-p", "5434", nullptr);
-            execl("./bin/dbserver", "dbserver", "-p", "5434", nullptr);
+            execl("../../bin/dbserver", "dbserver", "-p", "5434", "-d", "/tmp/tinydb_test_data", nullptr);
+            execl("../bin/dbserver", "dbserver", "-p", "5434", "-d", "/tmp/tinydb_test_data", nullptr);
+            execl("./bin/dbserver", "dbserver", "-p", "5434", "-d", "/tmp/tinydb_test_data", nullptr);
             exit(1);
         }
 
@@ -30,6 +33,9 @@ protected:
             kill(server_pid_, SIGTERM);
             waitpid(server_pid_, nullptr, 0);
         }
+
+        // 清理数据目录
+        system("rm -rf /tmp/tinydb_test_data");
     }
 
     pid_t server_pid_;
@@ -100,21 +106,67 @@ TEST_F(IntegrationTest, MultipleCommands) {
     Client client;
     ASSERT_TRUE(client.connect("localhost", 5434));
 
-    // 创建表
-    auto result1 = client.execute("CREATE TABLE test (id INT)");
+    // 创建多列表
+    auto result1 = client.execute(
+        "CREATE TABLE employees ("
+        "id INT, "
+        "name VARCHAR(32), "
+        "email VARCHAR(64), "
+        "age INT)"
+    );
     EXPECT_TRUE(result1.success());
+    EXPECT_NE(result1.message().find("CREATE"), std::string::npos);
 
-    // 插入数据
-    auto result2 = client.execute("INSERT INTO test VALUES (1)");
+    // 插入多条数据
+    auto result2 = client.execute(
+        "INSERT INTO employees VALUES (1, 'Alice', 'alice@example.com', 30)"
+    );
     EXPECT_TRUE(result2.success());
+    EXPECT_NE(result2.message().find("INSERT"), std::string::npos);
 
-    // 查询
-    auto result3 = client.execute("SELECT * FROM test");
+    auto result3 = client.execute(
+        "INSERT INTO employees VALUES (2, 'Bob', 'bob@example.com', 25)"
+    );
     EXPECT_TRUE(result3.success());
 
-    // 删除表
-    auto result4 = client.execute("DROP TABLE test");
+    auto result4 = client.execute(
+        "INSERT INTO employees VALUES (3, 'Charlie', 'charlie@example.com', 35)"
+    );
     EXPECT_TRUE(result4.success());
+
+    // 查询所有数据并验证
+    auto result5 = client.execute("SELECT * FROM employees");
+    EXPECT_TRUE(result5.success());
+    // 验证返回结果中包含插入的数据
+    EXPECT_NE(result5.message().find("Alice"), std::string::npos);
+    EXPECT_NE(result5.message().find("alice@example.com"), std::string::npos);
+    EXPECT_NE(result5.message().find("Bob"), std::string::npos);
+    EXPECT_NE(result5.message().find("bob@example.com"), std::string::npos);
+    EXPECT_NE(result5.message().find("Charlie"), std::string::npos);
+    EXPECT_NE(result5.message().find("charlie@example.com"), std::string::npos);
+
+    // 条件查询 - 按年龄筛选
+    auto result6 = client.execute("SELECT * FROM employees WHERE age > 25");
+    EXPECT_TRUE(result6.success());
+    EXPECT_NE(result6.message().find("Alice"), std::string::npos);
+    EXPECT_NE(result6.message().find("Charlie"), std::string::npos);
+
+    // 条件查询 - 按名字筛选
+    auto result7 = client.execute("SELECT * FROM employees WHERE name = 'Bob'");
+    EXPECT_TRUE(result7.success());
+    EXPECT_NE(result7.message().find("Bob"), std::string::npos);
+    EXPECT_NE(result7.message().find("bob@example.com"), std::string::npos);
+
+    // 投影查询 - 只查指定列
+    auto result8 = client.execute("SELECT name, age FROM employees");
+    EXPECT_TRUE(result8.success());
+    EXPECT_NE(result8.message().find("Alice"), std::string::npos);
+    EXPECT_NE(result8.message().find("30"), std::string::npos);
+
+    // 删除表
+    auto result9 = client.execute("DROP TABLE employees");
+    EXPECT_TRUE(result9.success());
+    EXPECT_NE(result9.message().find("DROP"), std::string::npos);
 
     client.disconnect();
 }

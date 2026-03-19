@@ -7,6 +7,8 @@
 #include "tuple.h"
 #include "table.h"
 #include "wal.h"
+#include "transaction.h"
+#include "lock_manager.h"
 
 namespace tinydb {
 namespace storage {
@@ -43,6 +45,12 @@ public:
     // 获取WAL管理器
     WALManager* getWALManager() { return wal_manager_.get(); }
 
+    // 获取事务管理器
+    TransactionManager* getTransactionManager() { return transaction_manager_.get(); }
+
+    // 获取锁管理器
+    LockManager* getLockManager() { return lock_manager_.get(); }
+
     // 创建表
     bool createTable(const std::string& table_name, const Schema& schema);
 
@@ -64,6 +72,9 @@ public:
     // 删除数据
     bool remove(const std::string& table_name, const TID& tid);
 
+    // 更新数据（阶段三新增）
+    bool update(const std::string& table_name, const TID& tid, const Tuple& new_tuple);
+
     // 获取数据
     Tuple get(const std::string& table_name, const TID& tid);
 
@@ -76,12 +87,23 @@ public:
     // 关闭存储引擎
     void shutdown();
 
+    // 事务相关方法（阶段三新增）
+    Transaction* beginTransaction();
+    bool commitTransaction(Transaction* txn);
+    bool abortTransaction(Transaction* txn);
+
+    // 锁相关方法（阶段三新增）
+    bool lockTable(Transaction* txn, const std::string& table_name, LockType lock_type);
+    bool unlockTable(Transaction* txn, const std::string& table_name);
+
 private:
     StorageConfig config_;
     std::unique_ptr<DiskManager> disk_manager_;
     std::unique_ptr<BufferPoolManager> buffer_pool_;
     std::unique_ptr<TableManager> table_manager_;
     std::unique_ptr<WALManager> wal_manager_;
+    std::unique_ptr<TransactionManager> transaction_manager_;
+    std::unique_ptr<LockManager> lock_manager_;
     bool initialized_ = false;
 };
 

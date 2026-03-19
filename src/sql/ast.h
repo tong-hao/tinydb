@@ -17,6 +17,9 @@ class DeleteStmt;
 class CreateTableStmt;
 class DropTableStmt;
 class AlterTableStmt;
+class BeginStmt;      // 新增
+class CommitStmt;     // 新增
+class RollbackStmt;   // 新增
 
 // AST 节点基类
 class ASTNode {
@@ -389,6 +392,30 @@ private:
     std::string new_table_name_;
     std::string column_name_;
     std::string column_type_;
+};
+
+// BEGIN 语句（阶段三新增）
+class BeginStmt : public Statement {
+public:
+    std::string toString() const override {
+        return "BEGIN";
+    }
+};
+
+// COMMIT 语句（阶段三新增）
+class CommitStmt : public Statement {
+public:
+    std::string toString() const override {
+        return "COMMIT";
+    }
+};
+
+// ROLLBACK 语句（阶段三新增）
+class RollbackStmt : public Statement {
+public:
+    std::string toString() const override {
+        return "ROLLBACK";
+    }
 };
 
 // AST 根节点

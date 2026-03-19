@@ -49,6 +49,9 @@ private:
     std::unique_ptr<CreateTableStmt> parseCreateTable();
     std::unique_ptr<DropTableStmt> parseDropTable();
     std::unique_ptr<AlterTableStmt> parseAlterTable();
+    std::unique_ptr<BeginStmt> parseBegin();      // 新增
+    std::unique_ptr<CommitStmt> parseCommit();    // 新增
+    std::unique_ptr<RollbackStmt> parseRollback(); // 新增
 
     // 解析表达式
     std::unique_ptr<Expression> parseExpression();

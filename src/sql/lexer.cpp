@@ -265,6 +265,13 @@ TokenType Lexer::getKeywordType(const std::string& word) const {
         {"modify", TokenType::MODIFY},
         {"rename", TokenType::RENAME},
 
+        // 事务关键字（阶段三新增）
+        {"begin", TokenType::BEGIN},
+        {"commit", TokenType::COMMIT},
+        {"rollback", TokenType::ROLLBACK},
+        {"transaction", TokenType::TRANSACTION},
+        {"savepoint", TokenType::SAVEPOINT},
+
         // 数据类型
         {"int", TokenType::INT},
         {"integer", TokenType::INT},
