@@ -42,6 +42,12 @@ bool StorageEngine::initialize() {
     lock_manager_ = std::make_unique<LockManager>();
     g_lock_manager = lock_manager_.get();
 
+    // Phase 4: 创建索引管理器
+    index_manager_ = std::make_unique<IndexManager>(buffer_pool_.get());
+
+    // Phase 4: 创建统计信息管理器
+    stats_manager_ = std::make_unique<StatisticsManager>(buffer_pool_.get());
+
     initialized_ = true;
     LOG_INFO("Storage engine initialized successfully");
     return true;
@@ -295,6 +301,129 @@ bool StorageEngine::unlockTable(Transaction* txn, const std::string& table_name)
         return false;
     }
     return lock_manager_->unlockTable(txn, table_name);
+}
+
+// Phase 4: 索引操作
+bool StorageEngine::createIndex(const std::string& index_name, const std::string& table_name,
+                                const std::string& column_name, bool is_unique) {
+    if (!initialized_) {
+        LOG_ERROR("Storage engine not initialized");
+        return false;
+    }
+
+    // 检查表是否存在
+    if (!table_manager_->tableExists(table_name)) {
+        LOG_ERROR("Table " << table_name << " does not exist");
+        return false;
+    }
+
+    // 创建索引
+    if (!index_manager_->createIndex(index_name, table_name, column_name, is_unique)) {
+        LOG_ERROR("Failed to create index " << index_name);
+        return false;
+    }
+
+    // 构建索引：扫描表并插入所有数据
+    auto index = index_manager_->getIndex(index_name);
+    if (!index) {
+        LOG_ERROR("Failed to get created index " << index_name);
+        return false;
+    }
+
+    auto table = table_manager_->getTable(table_name);
+    if (!table) {
+        LOG_ERROR("Failed to get table " << table_name);
+        return false;
+    }
+
+    // 找到列索引
+    int col_idx = -1;
+    for (size_t i = 0; i < table->schema.getColumnCount(); ++i) {
+        if (table->schema.getColumn(i).name == column_name) {
+            col_idx = static_cast<int>(i);
+            break;
+        }
+    }
+
+    if (col_idx < 0) {
+        LOG_ERROR("Column " << column_name << " not found in table " << table_name);
+        return false;
+    }
+
+    // 扫描表数据并构建索引
+    auto it = table_manager_->makeIterator(table_name);
+    while (it.hasNext()) {
+        Tuple tuple = it.getNext();
+        TID tid = it.getCurrentTID();
+
+        if (col_idx < static_cast<int>(tuple.getFieldCount())) {
+            IndexKey key = IndexKey::fromField(tuple.getField(col_idx));
+            if (!index->insert(key, tid)) {
+                LOG_WARN("Failed to insert index entry for TID " << tid.toString());
+            }
+        }
+    }
+
+    LOG_INFO("Created index " << index_name << " on " << table_name << "." << column_name);
+    return true;
+}
+
+bool StorageEngine::dropIndex(const std::string& index_name) {
+    if (!initialized_) {
+        LOG_ERROR("Storage engine not initialized");
+        return false;
+    }
+    return index_manager_->dropIndex(index_name);
+}
+
+std::shared_ptr<BTreeIndex> StorageEngine::getIndex(const std::string& index_name) {
+    if (!initialized_) {
+        LOG_ERROR("Storage engine not initialized");
+        return nullptr;
+    }
+    return index_manager_->getIndex(index_name);
+}
+
+std::vector<TID> StorageEngine::indexLookup(const std::string& table_name,
+                                            const std::string& column_name,
+                                            const IndexKey& key) {
+    if (!initialized_) {
+        LOG_ERROR("Storage engine not initialized");
+        return {};
+    }
+
+    auto index = index_manager_->getColumnIndex(table_name, column_name);
+    if (!index) {
+        return {};
+    }
+
+    return index->lookup(key);
+}
+
+std::vector<TID> StorageEngine::indexRangeQuery(const std::string& table_name,
+                                                const std::string& column_name,
+                                                const IndexKey& start_key,
+                                                const IndexKey& end_key) {
+    if (!initialized_) {
+        LOG_ERROR("Storage engine not initialized");
+        return {};
+    }
+
+    auto index = index_manager_->getColumnIndex(table_name, column_name);
+    if (!index) {
+        return {};
+    }
+
+    return index->rangeQuery(start_key, end_key);
+}
+
+// Phase 4: 统计信息
+bool StorageEngine::analyzeTable(const std::string& table_name) {
+    if (!initialized_) {
+        LOG_ERROR("Storage engine not initialized");
+        return false;
+    }
+    return stats_manager_->analyzeTable(table_name, table_manager_.get());
 }
 
 } // namespace storage

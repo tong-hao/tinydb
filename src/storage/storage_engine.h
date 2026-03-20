@@ -9,6 +9,9 @@
 #include "wal.h"
 #include "transaction.h"
 #include "lock_manager.h"
+#include "btree_index.h"
+#include "index_manager.h"
+#include "statistics.h"
 
 namespace tinydb {
 namespace storage {
@@ -50,6 +53,12 @@ public:
 
     // 获取锁管理器
     LockManager* getLockManager() { return lock_manager_.get(); }
+
+    // Phase 4: 获取索引管理器
+    IndexManager* getIndexManager() { return index_manager_.get(); }
+
+    // Phase 4: 获取统计信息管理器
+    StatisticsManager* getStatisticsManager() { return stats_manager_.get(); }
 
     // 创建表
     bool createTable(const std::string& table_name, const Schema& schema);
@@ -96,6 +105,21 @@ public:
     bool lockTable(Transaction* txn, const std::string& table_name, LockType lock_type);
     bool unlockTable(Transaction* txn, const std::string& table_name);
 
+    // Phase 4: 索引操作
+    bool createIndex(const std::string& index_name, const std::string& table_name,
+                     const std::string& column_name, bool is_unique = false);
+    bool dropIndex(const std::string& index_name);
+    std::shared_ptr<BTreeIndex> getIndex(const std::string& index_name);
+
+    // Phase 4: 索引扫描
+    std::vector<TID> indexLookup(const std::string& table_name, const std::string& column_name,
+                                 const IndexKey& key);
+    std::vector<TID> indexRangeQuery(const std::string& table_name, const std::string& column_name,
+                                     const IndexKey& start_key, const IndexKey& end_key);
+
+    // Phase 4: 统计信息
+    bool analyzeTable(const std::string& table_name);
+
 private:
     StorageConfig config_;
     std::unique_ptr<DiskManager> disk_manager_;
@@ -104,6 +128,8 @@ private:
     std::unique_ptr<WALManager> wal_manager_;
     std::unique_ptr<TransactionManager> transaction_manager_;
     std::unique_ptr<LockManager> lock_manager_;
+    std::unique_ptr<IndexManager> index_manager_;
+    std::unique_ptr<StatisticsManager> stats_manager_;
     bool initialized_ = false;
 };
 

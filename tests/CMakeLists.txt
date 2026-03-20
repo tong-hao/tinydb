@@ -76,6 +76,102 @@ target_link_libraries(test_expression
     GTest::gtest_main
 )
 
+# Phase 3: 执行器单元测试
+add_executable(test_executor
+    unit/test_executor.cpp
+)
+
+target_link_libraries(test_executor
+    engine
+    sql
+    storage
+    GTest::gtest_main
+)
+
+# Phase 3: WAL日志单元测试
+add_executable(test_wal
+    unit/test_wal.cpp
+)
+
+target_link_libraries(test_wal
+    storage
+    GTest::gtest_main
+)
+
+# Phase 4: B+树索引单元测试
+add_executable(test_btree_index
+    unit/test_btree_index.cpp
+)
+
+target_link_libraries(test_btree_index
+    storage
+    GTest::gtest_main
+)
+
+# Phase 4: 索引DDL单元测试
+add_executable(test_index_ddl
+    unit/test_index_ddl.cpp
+)
+
+target_link_libraries(test_index_ddl
+    storage
+    GTest::gtest_main
+)
+
+# Phase 4: 统计信息单元测试
+add_executable(test_statistics
+    unit/test_statistics.cpp
+)
+
+target_link_libraries(test_statistics
+    storage
+    GTest::gtest_main
+)
+
+# Phase 4: 查询优化器单元测试
+add_executable(test_optimizer
+    unit/test_optimizer.cpp
+)
+
+target_link_libraries(test_optimizer
+    engine
+    storage
+    GTest::gtest_main
+)
+
+# Phase 4: JOIN单元测试
+add_executable(test_join
+    unit/test_join.cpp
+)
+
+target_link_libraries(test_join
+    engine
+    storage
+    GTest::gtest_main
+)
+
+# Phase 4: 集成测试
+add_executable(test_phase4_integration
+    unit/test_phase4_integration.cpp
+)
+
+target_link_libraries(test_phase4_integration
+    engine
+    storage
+    GTest::gtest_main
+)
+
+# Phase 5: 企业级功能集成测试
+add_executable(test_phase5_integration
+    unit/test_phase5_integration.cpp
+)
+
+target_link_libraries(test_phase5_integration
+    engine
+    storage
+    GTest::gtest_main
+)
+
 # 集成测试
 add_executable(test_basic
     integration/test_basic.cpp
@@ -101,4 +197,13 @@ gtest_discover_tests(test_transaction)
 gtest_discover_tests(test_lock_manager)
 gtest_discover_tests(test_update_delete)
 gtest_discover_tests(test_expression)
+gtest_discover_tests(test_executor)
+gtest_discover_tests(test_wal)
+gtest_discover_tests(test_btree_index)
+gtest_discover_tests(test_index_ddl)
+gtest_discover_tests(test_statistics)
+gtest_discover_tests(test_optimizer)
+gtest_discover_tests(test_join)
+gtest_discover_tests(test_phase4_integration)
+gtest_discover_tests(test_phase5_integration)
 gtest_discover_tests(test_basic)

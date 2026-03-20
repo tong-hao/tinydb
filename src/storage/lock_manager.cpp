@@ -206,12 +206,41 @@ void LockManager::releaseAllLocks(Transaction* txn) {
 
     std::lock_guard<std::mutex> lock(mutex_);
 
+    // 先释放所有谓词锁
+    auto pred_it = txn_predicate_locks_.find(txn_id);
+    if (pred_it != txn_predicate_locks_.end()) {
+        for (const auto& pred_res : pred_it->second) {
+            auto lock_it = predicate_locks_.find(pred_res);
+            if (lock_it != predicate_locks_.end()) {
+                lock_it->second->unlock(txn_id);
+                LOG_DEBUG("Released predicate lock on " << pred_res.table_name
+                          << " for txn " << txn_id);
+            }
+        }
+        txn_predicate_locks_.erase(pred_it);
+    }
+
+    // 释放所有行锁
+    auto row_it = txn_row_locks_.find(txn_id);
+    if (row_it != txn_row_locks_.end()) {
+        for (const auto& row_res : row_it->second) {
+            auto lock_it = row_locks_.find(row_res);
+            if (lock_it != row_locks_.end()) {
+                lock_it->second->unlock(txn_id);
+                LOG_DEBUG("Released row lock on " << row_res.table_name
+                          << " TID(" << row_res.tid.page_id << ", " << row_res.tid.slot_id
+                          << ") for txn " << txn_id);
+            }
+        }
+        txn_row_locks_.erase(row_it);
+    }
+
+    // 释放所有表锁
     auto it = txn_locks_.find(txn_id);
     if (it == txn_locks_.end()) {
         return;  // 事务没有持有任何锁
     }
 
-    // 释放所有锁
     for (const auto& resource_name : it->second) {
         auto lock_it = locks_.find(resource_name);
         if (lock_it != locks_.end()) {
@@ -351,6 +380,483 @@ TableLockGuard& TableLockGuard::operator=(TableLockGuard&& other) noexcept {
 void TableLockGuard::unlock() {
     if (locked_ && lock_mgr_ && txn_) {
         lock_mgr_->unlockTable(txn_, table_name_);
+        locked_ = false;
+    }
+}
+
+// ==================== Row-Level Locking Implementation ====================
+
+bool LockManager::lockRow(Transaction* txn, const std::string& table_name, const TID& tid,
+                          LockType lock_type, uint32_t timeout_ms) {
+    if (!txn) {
+        LOG_ERROR("Cannot lock row for null transaction");
+        return false;
+    }
+
+    TransactionId txn_id = txn->getId();
+    RowLockResource resource(table_name, tid);
+
+    std::unique_lock<std::mutex> lock(mutex_);
+
+    // 获取或创建行锁对象
+    Lock* lock_obj = getOrCreateRowLock(resource);
+
+    // 尝试获取锁
+    auto start_time = std::chrono::steady_clock::now();
+    while (!lock_obj->tryLock(txn_id, lock_type)) {
+        LOG_DEBUG("Txn " << txn_id << " waiting for row lock on " << table_name
+                  << " TID(" << tid.page_id << ", " << tid.slot_id << ")");
+
+        // 检查超时
+        if (timeout_ms > 0) {
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - start_time).count();
+            if (elapsed >= timeout_ms) {
+                LOG_WARN("Txn " << txn_id << " timeout waiting for row lock on " << table_name);
+                return false;
+            }
+        }
+
+        // 等待并重试
+        lock.unlock();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        lock.lock();
+    }
+
+    // 记录事务持有的行锁
+    txn_row_locks_[txn_id].push_back(resource);
+
+    LOG_DEBUG("Txn " << txn_id << " acquired "
+              << (lock_type == LockType::SHARED ? "SHARED" : "EXCLUSIVE")
+              << " row lock on " << table_name
+              << " TID(" << tid.page_id << ", " << tid.slot_id << ")");
+    return true;
+}
+
+bool LockManager::unlockRow(Transaction* txn, const std::string& table_name, const TID& tid) {
+    if (!txn) {
+        LOG_ERROR("Cannot unlock row for null transaction");
+        return false;
+    }
+
+    TransactionId txn_id = txn->getId();
+    RowLockResource resource(table_name, tid);
+
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = row_locks_.find(resource);
+    if (it == row_locks_.end()) {
+        LOG_WARN("Trying to unlock non-existent row lock on " << table_name);
+        return false;
+    }
+
+    // 释放锁
+    it->second->unlock(txn_id);
+
+    // 从事务的行锁列表中移除
+    auto txn_it = txn_row_locks_.find(txn_id);
+    if (txn_it != txn_row_locks_.end()) {
+        auto& locks = txn_it->second;
+        locks.erase(std::remove_if(locks.begin(), locks.end(),
+            [&resource](const RowLockResource& res) {
+                return res.table_name == resource.table_name && res.tid == resource.tid;
+            }), locks.end());
+        if (locks.empty()) {
+            txn_row_locks_.erase(txn_it);
+        }
+    }
+
+    LOG_DEBUG("Txn " << txn_id << " released row lock on " << table_name);
+    return true;
+}
+
+void LockManager::releaseAllRowLocks(Transaction* txn) {
+    if (!txn) return;
+
+    TransactionId txn_id = txn->getId();
+
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = txn_row_locks_.find(txn_id);
+    if (it == txn_row_locks_.end()) {
+        return;
+    }
+
+    for (const auto& resource : it->second) {
+        auto lock_it = row_locks_.find(resource);
+        if (lock_it != row_locks_.end()) {
+            lock_it->second->unlock(txn_id);
+            LOG_DEBUG("Released row lock on " << resource.table_name
+                      << " TID(" << resource.tid.page_id << ", " << resource.tid.slot_id
+                      << ") for txn " << txn_id);
+        }
+    }
+
+    txn_row_locks_.erase(it);
+}
+
+bool LockManager::isRowLockedBy(TransactionId txn_id, const std::string& table_name,
+                                 const TID& tid, LockType* out_type) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    RowLockResource resource(table_name, tid);
+    auto it = row_locks_.find(resource);
+    if (it == row_locks_.end()) {
+        return false;
+    }
+
+    if (!it->second->isHeldBy(txn_id)) {
+        return false;
+    }
+
+    if (out_type) {
+        *out_type = it->second->getLockType();
+    }
+
+    return true;
+}
+
+bool LockManager::isRowLocked(const std::string& table_name, const TID& tid,
+                              LockType* out_type) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    RowLockResource resource(table_name, tid);
+    auto it = row_locks_.find(resource);
+    if (it == row_locks_.end()) {
+        return false;
+    }
+
+    if (it->second->getHolderCount() == 0) {
+        return false;
+    }
+
+    if (out_type) {
+        *out_type = it->second->getLockType();
+    }
+
+    return true;
+}
+
+size_t LockManager::getRowLockWaiterCount(const std::string& table_name, const TID& tid) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    RowLockResource resource(table_name, tid);
+    auto it = row_locks_.find(resource);
+    if (it == row_locks_.end()) {
+        return 0;
+    }
+
+    return it->second->getWaiterCount();
+}
+
+Lock* LockManager::getOrCreateRowLock(const RowLockResource& resource) {
+    auto it = row_locks_.find(resource);
+    if (it != row_locks_.end()) {
+        return it->second.get();
+    }
+
+    // 创建新锁
+    auto resource_name = "row:" + resource.table_name + ":" +
+                         std::to_string(resource.tid.page_id) + ":" +
+                         std::to_string(resource.tid.slot_id);
+    auto new_lock = std::make_unique<Lock>(resource_name);
+    Lock* lock_ptr = new_lock.get();
+    row_locks_[resource] = std::move(new_lock);
+    return lock_ptr;
+}
+
+void LockManager::cleanupEmptyRowLocks() {
+    for (auto it = row_locks_.begin(); it != row_locks_.end();) {
+        if (it->second->getHolderCount() == 0 && it->second->getWaiterCount() == 0) {
+            it = row_locks_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+// ==================== Predicate Locking Implementation ====================
+
+bool LockManager::lockPredicate(Transaction* txn, const std::string& table_name,
+                                const std::string& predicate,
+                                const std::string& index_name,
+                                uint32_t timeout_ms) {
+    if (!txn) {
+        LOG_ERROR("Cannot lock predicate for null transaction");
+        return false;
+    }
+
+    TransactionId txn_id = txn->getId();
+    PredicateLockResource resource(table_name, predicate, index_name);
+
+    std::unique_lock<std::mutex> lock(mutex_);
+
+    // 获取或创建谓词锁对象
+    Lock* lock_obj = getOrCreatePredicateLock(resource);
+
+    // 尝试获取锁
+    auto start_time = std::chrono::steady_clock::now();
+    while (!lock_obj->tryLock(txn_id, LockType::SHARED)) {
+        LOG_DEBUG("Txn " << txn_id << " waiting for predicate lock on " << table_name
+                  << " predicate: " << predicate);
+
+        // 检查超时
+        if (timeout_ms > 0) {
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - start_time).count();
+            if (elapsed >= timeout_ms) {
+                LOG_WARN("Txn " << txn_id << " timeout waiting for predicate lock on " << table_name);
+                return false;
+            }
+        }
+
+        // 等待并重试
+        lock.unlock();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        lock.lock();
+    }
+
+    // 记录事务持有的谓词锁
+    txn_predicate_locks_[txn_id].push_back(resource);
+
+    LOG_DEBUG("Txn " << txn_id << " acquired predicate lock on " << table_name
+              << " predicate: " << predicate);
+    return true;
+}
+
+bool LockManager::unlockPredicate(Transaction* txn, const std::string& table_name,
+                                  const std::string& predicate,
+                                  const std::string& index_name) {
+    if (!txn) {
+        LOG_ERROR("Cannot unlock predicate for null transaction");
+        return false;
+    }
+
+    TransactionId txn_id = txn->getId();
+    PredicateLockResource resource(table_name, predicate, index_name);
+
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = predicate_locks_.find(resource);
+    if (it == predicate_locks_.end()) {
+        LOG_WARN("Trying to unlock non-existent predicate lock on " << table_name);
+        return false;
+    }
+
+    // 释放锁
+    it->second->unlock(txn_id);
+
+    // 从事务的谓词锁列表中移除
+    auto txn_it = txn_predicate_locks_.find(txn_id);
+    if (txn_it != txn_predicate_locks_.end()) {
+        auto& locks = txn_it->second;
+        locks.erase(std::remove_if(locks.begin(), locks.end(),
+            [&resource](const PredicateLockResource& res) {
+                return res.table_name == resource.table_name &&
+                       res.predicate == resource.predicate &&
+                       res.index_name == resource.index_name;
+            }), locks.end());
+        if (locks.empty()) {
+            txn_predicate_locks_.erase(txn_it);
+        }
+    }
+
+    LOG_DEBUG("Txn " << txn_id << " released predicate lock on " << table_name);
+    return true;
+}
+
+void LockManager::releaseAllPredicateLocks(Transaction* txn) {
+    if (!txn) return;
+
+    TransactionId txn_id = txn->getId();
+
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = txn_predicate_locks_.find(txn_id);
+    if (it == txn_predicate_locks_.end()) {
+        return;
+    }
+
+    for (const auto& resource : it->second) {
+        auto lock_it = predicate_locks_.find(resource);
+        if (lock_it != predicate_locks_.end()) {
+            lock_it->second->unlock(txn_id);
+            LOG_DEBUG("Released predicate lock on " << resource.table_name
+                      << " for txn " << txn_id);
+        }
+    }
+
+    txn_predicate_locks_.erase(it);
+}
+
+bool LockManager::isPredicateLocked(const std::string& table_name,
+                                    const std::string& predicate,
+                                    const std::string& index_name) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    PredicateLockResource resource(table_name, predicate, index_name);
+    auto it = predicate_locks_.find(resource);
+    if (it == predicate_locks_.end()) {
+        return false;
+    }
+
+    return it->second->getHolderCount() > 0;
+}
+
+bool LockManager::checkPredicateConflict(const std::string& table_name,
+                                         const std::string& predicate1,
+                                         const std::string& predicate2) const {
+    // 简化实现：检查谓词是否有重叠
+    // 实际实现需要解析谓词并检查范围重叠
+    // 例如："age > 10 AND age < 20" 与 "age > 15 AND age < 25" 冲突
+
+    if (table_name.empty() || predicate1.empty() || predicate2.empty()) {
+        return false;
+    }
+
+    // 如果谓词完全相同，肯定冲突
+    if (predicate1 == predicate2) {
+        return true;
+    }
+
+    // 简化：检查是否涉及相同列
+    // 实际应该解析谓词表达式
+    LOG_DEBUG("Checking predicate conflict: '" << predicate1 << "' vs '" << predicate2 << "'");
+
+    // 保守策略：假设可能冲突
+    return true;
+}
+
+Lock* LockManager::getOrCreatePredicateLock(const PredicateLockResource& resource) {
+    auto it = predicate_locks_.find(resource);
+    if (it != predicate_locks_.end()) {
+        return it->second.get();
+    }
+
+    // 创建新锁
+    auto resource_name = "predicate:" + resource.table_name + ":" + resource.predicate;
+    if (!resource.index_name.empty()) {
+        resource_name += ":" + resource.index_name;
+    }
+    auto new_lock = std::make_unique<Lock>(resource_name);
+    Lock* lock_ptr = new_lock.get();
+    predicate_locks_[resource] = std::move(new_lock);
+    return lock_ptr;
+}
+
+void LockManager::cleanupEmptyPredicateLocks() {
+    for (auto it = predicate_locks_.begin(); it != predicate_locks_.end();) {
+        if (it->second->getHolderCount() == 0 && it->second->getWaiterCount() == 0) {
+            it = predicate_locks_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+// ==================== RowLockGuard Implementation ====================
+
+RowLockGuard::RowLockGuard(LockManager* lock_mgr, Transaction* txn,
+                           const std::string& table_name, const TID& tid, LockType lock_type)
+    : lock_mgr_(lock_mgr)
+    , txn_(txn)
+    , table_name_(table_name)
+    , tid_(tid)
+    , locked_(false) {
+    if (lock_mgr_ && txn_) {
+        locked_ = lock_mgr_->lockRow(txn_, table_name_, tid_, lock_type);
+    }
+}
+
+RowLockGuard::~RowLockGuard() {
+    unlock();
+}
+
+RowLockGuard::RowLockGuard(RowLockGuard&& other) noexcept
+    : lock_mgr_(other.lock_mgr_)
+    , txn_(other.txn_)
+    , table_name_(std::move(other.table_name_))
+    , tid_(other.tid_)
+    , locked_(other.locked_) {
+    other.lock_mgr_ = nullptr;
+    other.txn_ = nullptr;
+    other.locked_ = false;
+}
+
+RowLockGuard& RowLockGuard::operator=(RowLockGuard&& other) noexcept {
+    if (this != &other) {
+        unlock();
+        lock_mgr_ = other.lock_mgr_;
+        txn_ = other.txn_;
+        table_name_ = std::move(other.table_name_);
+        tid_ = other.tid_;
+        locked_ = other.locked_;
+        other.lock_mgr_ = nullptr;
+        other.txn_ = nullptr;
+        other.locked_ = false;
+    }
+    return *this;
+}
+
+void RowLockGuard::unlock() {
+    if (locked_ && lock_mgr_ && txn_) {
+        lock_mgr_->unlockRow(txn_, table_name_, tid_);
+        locked_ = false;
+    }
+}
+
+// ==================== PredicateLockGuard Implementation ====================
+
+PredicateLockGuard::PredicateLockGuard(LockManager* lock_mgr, Transaction* txn,
+                                       const std::string& table_name,
+                                       const std::string& predicate,
+                                       const std::string& index_name)
+    : lock_mgr_(lock_mgr)
+    , txn_(txn)
+    , table_name_(table_name)
+    , predicate_(predicate)
+    , index_name_(index_name)
+    , locked_(false) {
+    if (lock_mgr_ && txn_) {
+        locked_ = lock_mgr_->lockPredicate(txn_, table_name_, predicate_, index_name_);
+    }
+}
+
+PredicateLockGuard::~PredicateLockGuard() {
+    unlock();
+}
+
+PredicateLockGuard::PredicateLockGuard(PredicateLockGuard&& other) noexcept
+    : lock_mgr_(other.lock_mgr_)
+    , txn_(other.txn_)
+    , table_name_(std::move(other.table_name_))
+    , predicate_(std::move(other.predicate_))
+    , index_name_(std::move(other.index_name_))
+    , locked_(other.locked_) {
+    other.lock_mgr_ = nullptr;
+    other.txn_ = nullptr;
+    other.locked_ = false;
+}
+
+PredicateLockGuard& PredicateLockGuard::operator=(PredicateLockGuard&& other) noexcept {
+    if (this != &other) {
+        unlock();
+        lock_mgr_ = other.lock_mgr_;
+        txn_ = other.txn_;
+        table_name_ = std::move(other.table_name_);
+        predicate_ = std::move(other.predicate_);
+        index_name_ = std::move(other.index_name_);
+        locked_ = other.locked_;
+        other.lock_mgr_ = nullptr;
+        other.txn_ = nullptr;
+        other.locked_ = false;
+    }
+    return *this;
+}
+
+void PredicateLockGuard::unlock() {
+    if (locked_ && lock_mgr_ && txn_) {
+        lock_mgr_->unlockPredicate(txn_, table_name_, predicate_, index_name_);
         locked_ = false;
     }
 }

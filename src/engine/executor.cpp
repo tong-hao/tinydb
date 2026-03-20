@@ -49,6 +49,14 @@ ExecutionResult Executor::execute(const sql::AST& ast) {
         return executeCommit(commit_stmt);
     } else if (auto rollback_stmt = dynamic_cast<const sql::RollbackStmt*>(stmt)) {
         return executeRollback(rollback_stmt);
+    } else if (auto create_index_stmt = dynamic_cast<const sql::CreateIndexStmt*>(stmt)) {
+        return executeCreateIndex(create_index_stmt);
+    } else if (auto drop_index_stmt = dynamic_cast<const sql::DropIndexStmt*>(stmt)) {
+        return executeDropIndex(drop_index_stmt);
+    } else if (auto analyze_stmt = dynamic_cast<const sql::AnalyzeStmt*>(stmt)) {
+        return executeAnalyze(analyze_stmt);
+    } else if (auto explain_stmt = dynamic_cast<const sql::ExplainStmt*>(stmt)) {
+        return executeExplain(explain_stmt);
     }
 
     return ExecutionResult::error("Unsupported statement type");
@@ -240,6 +248,68 @@ ExecutionResult Executor::executeSelect(const sql::SelectStmt* stmt) {
 
     std::string table_name = stmt ? stmt->fromTable() : "";
 
+    // Phase 4: 检查是否是多表JOIN查询
+    if (stmt && !stmt->joinTables().empty()) {
+        return executeJoin(stmt);
+    }
+
+    // Phase 4: 使用优化器生成执行计划
+    if (stmt && !table_name.empty() && optimizer_) {
+        ExecutionPlan plan = optimizer_->optimize(stmt);
+        // 可以根据执行计划选择扫描方式
+    }
+
+    // Phase 4: 检查是否可以使用索引扫描
+    if (stmt && stmt->whereCondition() && !table_name.empty()) {
+        // 尝试找到可以使用索引的列
+        auto comp_expr = dynamic_cast<const sql::ComparisonExpr*>(stmt->whereCondition());
+        if (comp_expr && comp_expr->op() == sql::OpType::EQ) {
+            if (auto col_ref = dynamic_cast<const sql::ColumnRefExpr*>(comp_expr->left())) {
+                std::string col_name = col_ref->columnName();
+
+                // 检查该列是否有索引
+                auto index = storage_engine_->getIndexManager()->getColumnIndex(table_name, col_name);
+                if (index && comp_expr->right()) {
+                    // 获取查询值
+                    if (auto literal = dynamic_cast<const sql::LiteralExpr*>(comp_expr->right())) {
+                        std::string val = literal->value();
+                        if (val.size() >= 2 && val.front() == '\'' && val.back() == '\'') {
+                            val = val.substr(1, val.size() - 2);
+                        }
+
+                        // 构建索引键
+                        storage::IndexKey key;
+                        try {
+                            key = storage::IndexKey(std::stoi(val));
+                        } catch (...) {
+                            key = storage::IndexKey(val);
+                        }
+
+                        // 使用索引查找
+                        auto tids = storage_engine_->indexLookup(table_name, col_name, key);
+
+                        std::string result = "Table: " + table_name + " (Index Scan on " + col_name + ")\n";
+                        result += "--------------------\n";
+
+                        auto table_meta = storage_engine_->getTable(table_name);
+                        int count = 0;
+                        for (const auto& tid : tids) {
+                            auto tuple = storage_engine_->get(table_name, tid);
+                            result += formatTuple(tuple, stmt->selectList(), &table_meta->schema) + "\n";
+                            count++;
+                        }
+
+                        result += "--------------------\n";
+                        result += "Total rows: " + std::to_string(count);
+
+                        return ExecutionResult::ok(result);
+                    }
+                }
+            }
+        }
+    }
+
+    // 原有的SELECT逻辑...
     if (table_name == "pg_class" || table_name == "pg_attribute") {
         // 查询系统表
         std::string result = "Table: " + table_name + "\n";
@@ -932,6 +1002,347 @@ bool Executor::releaseTableLock(const std::string& table_name) {
     }
 
     return storage_engine_->unlockTable(current_txn_, table_name);
+}
+
+// Phase 4: CREATE INDEX
+ExecutionResult Executor::executeCreateIndex(const sql::CreateIndexStmt* stmt) {
+    if (!storage_engine_) {
+        return ExecutionResult::error("No storage engine");
+    }
+
+    if (!stmt) {
+        return ExecutionResult::error("Invalid CREATE INDEX statement");
+    }
+
+    std::string index_name = stmt->indexName();
+    std::string table_name = stmt->tableName();
+    std::string column_name = stmt->columnName();
+    bool is_unique = stmt->isUnique();
+
+    // 检查表是否存在
+    if (!storage_engine_->tableExists(table_name)) {
+        return ExecutionResult::error("Table does not exist: " + table_name);
+    }
+
+    // 获取表元数据，检查列是否存在
+    auto table_meta = storage_engine_->getTable(table_name);
+    if (!table_meta) {
+        return ExecutionResult::error("Failed to get table metadata: " + table_name);
+    }
+
+    int col_idx = table_meta->schema.findColumnIndex(column_name);
+    if (col_idx < 0) {
+        return ExecutionResult::error("Column does not exist: " + column_name);
+    }
+
+    // 创建索引
+    if (storage_engine_->createIndex(index_name, table_name, column_name, is_unique)) {
+        return ExecutionResult::ok("CREATE INDEX " + index_name + " ON " + table_name +
+                                   "(" + column_name + ")");
+    }
+
+    return ExecutionResult::error("Failed to create index: " + index_name);
+}
+
+// Phase 4: DROP INDEX
+ExecutionResult Executor::executeDropIndex(const sql::DropIndexStmt* stmt) {
+    if (!storage_engine_) {
+        return ExecutionResult::error("No storage engine");
+    }
+
+    if (!stmt) {
+        return ExecutionResult::error("Invalid DROP INDEX statement");
+    }
+
+    std::string index_name = stmt->indexName();
+
+    if (storage_engine_->getIndex(index_name)) {
+        if (storage_engine_->dropIndex(index_name)) {
+            return ExecutionResult::ok("DROP INDEX " + index_name);
+        }
+        return ExecutionResult::error("Failed to drop index: " + index_name);
+    }
+
+    return ExecutionResult::error("Index does not exist: " + index_name);
+}
+
+// Phase 4: ANALYZE
+ExecutionResult Executor::executeAnalyze(const sql::AnalyzeStmt* stmt) {
+    if (!storage_engine_) {
+        return ExecutionResult::error("No storage engine");
+    }
+
+    if (!stmt) {
+        return ExecutionResult::error("Invalid ANALYZE statement");
+    }
+
+    std::string table_name = stmt->tableName();
+
+    if (!storage_engine_->tableExists(table_name)) {
+        return ExecutionResult::error("Table does not exist: " + table_name);
+    }
+
+    if (storage_engine_->analyzeTable(table_name)) {
+        return ExecutionResult::ok("ANALYZE " + table_name);
+    }
+
+    return ExecutionResult::error("Failed to analyze table: " + table_name);
+}
+
+// Phase 4: EXPLAIN
+ExecutionResult Executor::executeExplain(const sql::ExplainStmt* stmt) {
+    if (!storage_engine_) {
+        return ExecutionResult::error("No storage engine");
+    }
+
+    if (!stmt || !stmt->innerStatement()) {
+        return ExecutionResult::error("Invalid EXPLAIN statement");
+    }
+
+    // 检查是否是SELECT语句
+    if (auto select_stmt = dynamic_cast<const sql::SelectStmt*>(stmt->innerStatement())) {
+        if (!optimizer_) {
+            optimizer_ = std::make_unique<QueryOptimizer>(
+                storage_engine_->getStatisticsManager(),
+                storage_engine_->getIndexManager());
+        }
+
+        ExecutionPlan plan = optimizer_->optimize(select_stmt);
+        return ExecutionResult::ok("\n" + plan.toString());
+    }
+
+    return ExecutionResult::ok("EXPLAIN: Query plan not available for this statement type");
+}
+
+// Phase 4: JOIN execution
+ExecutionResult Executor::executeJoin(const sql::SelectStmt* stmt) {
+    if (!storage_engine_) {
+        return ExecutionResult::error("No storage engine");
+    }
+
+    // 获取所有表
+    auto tables = stmt->getAllTables();
+    if (tables.size() < 2) {
+        return ExecutionResult::error("JOIN requires at least 2 tables");
+    }
+
+    // 检查所有表是否存在
+    for (const auto& table_name : tables) {
+        if (!storage_engine_->tableExists(table_name)) {
+            return ExecutionResult::error("Table does not exist: " + table_name);
+        }
+    }
+
+    // 使用优化器生成执行计划
+    if (!optimizer_) {
+        optimizer_ = std::make_unique<QueryOptimizer>(
+            storage_engine_->getStatisticsManager(),
+            storage_engine_->getIndexManager());
+    }
+
+    ExecutionPlan plan = optimizer_->optimize(stmt);
+
+    // 执行Nested Loop Join（简化实现）
+    std::string result = "JOIN Result:\n";
+    result += "--------------------\n";
+
+    // 获取表元数据
+    auto left_table = storage_engine_->getTable(tables[0]);
+    auto right_table = storage_engine_->getTable(tables[1]);
+
+    // 执行Nested Loop Join
+    auto left_iter = storage_engine_->scan(tables[0]);
+    int row_count = 0;
+
+    while (left_iter.hasNext()) {
+        auto left_tuple = left_iter.getNext();
+
+        auto right_iter = storage_engine_->scan(tables[1]);
+        while (right_iter.hasNext()) {
+            auto right_tuple = right_iter.getNext();
+
+            // 检查JOIN条件（简化：使用WHERE条件）
+            std::vector<storage::Tuple> tuples = {left_tuple, right_tuple};
+            std::vector<storage::Schema*> schemas = {&left_table->schema, &right_table->schema};
+
+            if (stmt->whereCondition()) {
+                if (!evaluateJoinWhereCondition(tuples, schemas, stmt->whereCondition())) {
+                    continue;
+                }
+            }
+
+            // 格式化输出
+            result += formatJoinTuple(tuples, schemas, stmt->selectList()) + "\n";
+            row_count++;
+        }
+    }
+
+    result += "--------------------\n";
+    result += "Total rows: " + std::to_string(row_count);
+
+    return ExecutionResult::ok(result);
+}
+
+// Phase 4: JOIN WHERE条件评估
+bool Executor::evaluateJoinWhereCondition(const std::vector<storage::Tuple>& tuples,
+                                          const std::vector<storage::Schema*>& schemas,
+                                          const sql::Expression* condition) {
+    if (!condition) return true;
+
+    // 处理比较表达式
+    if (auto comp_expr = dynamic_cast<const sql::ComparisonExpr*>(condition)) {
+        auto left = comp_expr->left();
+        auto right = comp_expr->right();
+
+        // 获取左值
+        storage::Field left_field = evaluateJoinExpression(left, tuples, schemas);
+        storage::Field right_field = evaluateJoinExpression(right, tuples, schemas);
+
+        std::string left_val = left_field.toString();
+        std::string right_val = right_field.toString();
+
+        // 去除引号
+        if (left_val.size() >= 2 && left_val.front() == '\'' && left_val.back() == '\'') {
+            left_val = left_val.substr(1, left_val.size() - 2);
+        }
+        if (right_val.size() >= 2 && right_val.front() == '\'' && right_val.back() == '\'') {
+            right_val = right_val.substr(1, right_val.size() - 2);
+        }
+
+        // 比较操作
+        switch (comp_expr->op()) {
+            case sql::OpType::EQ:
+                return left_val == right_val;
+            case sql::OpType::NE:
+                return left_val != right_val;
+            case sql::OpType::LT:
+                try {
+                    return std::stod(left_val) < std::stod(right_val);
+                } catch (...) {
+                    return left_val < right_val;
+                }
+            case sql::OpType::LE:
+                try {
+                    return std::stod(left_val) <= std::stod(right_val);
+                } catch (...) {
+                    return left_val <= right_val;
+                }
+            case sql::OpType::GT:
+                try {
+                    return std::stod(left_val) > std::stod(right_val);
+                } catch (...) {
+                    return left_val > right_val;
+                }
+            case sql::OpType::GE:
+                try {
+                    return std::stod(left_val) >= std::stod(right_val);
+                } catch (...) {
+                    return left_val >= right_val;
+                }
+            default:
+                return false;
+        }
+    }
+
+    // 处理逻辑表达式
+    if (auto logic_expr = dynamic_cast<const sql::LogicalExpr*>(condition)) {
+        auto left_result = evaluateJoinWhereCondition(tuples, schemas, logic_expr->left());
+
+        if (logic_expr->op() == sql::OpType::AND) {
+            if (!left_result) return false;
+            return evaluateJoinWhereCondition(tuples, schemas, logic_expr->right());
+        } else if (logic_expr->op() == sql::OpType::OR) {
+            if (left_result) return true;
+            return evaluateJoinWhereCondition(tuples, schemas, logic_expr->right());
+        } else if (logic_expr->op() == sql::OpType::NOT) {
+            return !left_result;
+        }
+    }
+
+    return true;
+}
+
+// Phase 4: JOIN表达式求值
+storage::Field Executor::evaluateJoinExpression(const sql::Expression* expr,
+                                                const std::vector<storage::Tuple>& tuples,
+                                                const std::vector<storage::Schema*>& schemas) {
+    if (!expr) {
+        return storage::Field();
+    }
+
+    // 处理字面量
+    if (auto literal = dynamic_cast<const sql::LiteralExpr*>(expr)) {
+        std::string val = literal->value();
+        if (val.size() >= 2 && val.front() == '\'' && val.back() == '\'') {
+            val = val.substr(1, val.size() - 2);
+        }
+        try {
+            return storage::Field(static_cast<int64_t>(std::stoll(val)));
+        } catch (...) {
+            return storage::Field(val, storage::DataType::VARCHAR);
+        }
+    }
+
+    // 处理列引用（需要在多个表中查找）
+    if (auto col_ref = dynamic_cast<const sql::ColumnRefExpr*>(expr)) {
+        std::string col_name = col_ref->columnName();
+
+        // 检查是否是 qualified name (table.column)
+        size_t dot_pos = col_name.find('.');
+        if (dot_pos != std::string::npos) {
+            std::string table_hint = col_name.substr(0, dot_pos);
+            std::string actual_col = col_name.substr(dot_pos + 1);
+
+            // 在指定表中查找
+            for (size_t i = 0; i < schemas.size(); ++i) {
+                // 简化处理：假设表名在schema中（需要扩展）
+                int col_idx = schemas[i]->findColumnIndex(actual_col);
+                if (col_idx >= 0 && i < tuples.size()) {
+                    return tuples[i].getField(col_idx);
+                }
+            }
+        } else {
+            // 在所有表中查找（返回第一个匹配的）
+            for (size_t i = 0; i < schemas.size(); ++i) {
+                int col_idx = schemas[i]->findColumnIndex(col_name);
+                if (col_idx >= 0 && i < tuples.size()) {
+                    return tuples[i].getField(col_idx);
+                }
+            }
+        }
+        return storage::Field();
+    }
+
+    return storage::Field();
+}
+
+// Phase 4: JOIN结果格式化
+std::string Executor::formatJoinTuple(const std::vector<storage::Tuple>& tuples,
+                                      const std::vector<storage::Schema*>& schemas,
+                                      const std::vector<std::unique_ptr<sql::Expression>>& select_list) {
+    if (select_list.empty()) {
+        // 返回所有列
+        std::string result = "(";
+        for (size_t t = 0; t < tuples.size(); ++t) {
+            if (t > 0) result += ", ";
+            for (size_t i = 0; i < tuples[t].getFieldCount(); ++i) {
+                if (i > 0) result += ", ";
+                result += tuples[t].getField(i).toString();
+            }
+        }
+        result += ")";
+        return result;
+    }
+
+    std::string result = "(";
+    for (size_t i = 0; i < select_list.size(); ++i) {
+        if (i > 0) result += ", ";
+
+        storage::Field field = evaluateJoinExpression(select_list[i].get(), tuples, schemas);
+        result += field.toString();
+    }
+    result += ")";
+    return result;
 }
 
 } // namespace engine

@@ -39,6 +39,8 @@ target_include_directories(sql PRIVATE
 # 执行引擎库
 add_library(engine STATIC
     engine/executor.cpp
+    engine/optimizer.cpp
+    engine/system_view_manager.cpp
 )
 
 target_link_libraries(engine

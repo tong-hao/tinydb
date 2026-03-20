@@ -25,6 +25,16 @@ target_link_libraries(dbclient
     common
 )
 
-set_target_properties(dbclient PROPERTIES
+# 交互式 CLI 客户端（psql-like）
+add_executable(tinydb-cli
+    cli.cpp
+)
+
+target_link_libraries(tinydb-cli
+    tinydb_client
+    common
+)
+
+set_target_properties(tinydb-cli PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )

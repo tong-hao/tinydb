@@ -17,9 +17,12 @@ class DeleteStmt;
 class CreateTableStmt;
 class DropTableStmt;
 class AlterTableStmt;
-class BeginStmt;      // 新增
-class CommitStmt;     // 新增
-class RollbackStmt;   // 新增
+class CreateIndexStmt;  // Phase 4
+class DropIndexStmt;    // Phase 4
+class JoinTable;        // Phase 4
+class BeginStmt;
+class CommitStmt;
+class RollbackStmt;
 
 // AST 节点基类
 class ASTNode {
@@ -163,7 +166,35 @@ private:
     std::unique_ptr<Expression> right_;
 };
 
-// 语句基类
+// JOIN类型
+enum class JoinType {
+    INNER,
+    LEFT,
+    RIGHT,
+    FULL
+};
+
+// JOIN表（用于多表JOIN）
+class JoinTable {
+public:
+    JoinTable(std::string table, JoinType type)
+        : table_name_(std::move(table)), join_type_(type) {}
+
+    void setJoinCondition(std::unique_ptr<Expression> condition) {
+        join_condition_ = std::move(condition);
+    }
+
+    const std::string& tableName() const { return table_name_; }
+    JoinType joinType() const { return join_type_; }
+    Expression* joinCondition() const { return join_condition_.get(); }
+
+private:
+    std::string table_name_;
+    JoinType join_type_;
+    std::unique_ptr<Expression> join_condition_;
+};
+
+// Statement 基类
 class Statement : public ASTNode {
 public:
     virtual ~Statement() = default;
@@ -183,9 +214,29 @@ public:
     void setFromTable(const std::string& table) { from_table_ = table; }
     void setWhereCondition(std::unique_ptr<Expression> condition) { where_condition_ = std::move(condition); }
 
+    // Phase 4: 支持多表JOIN
+    void addJoinTable(std::unique_ptr<JoinTable> join) {
+        join_tables_.push_back(std::move(join));
+    }
+
     const std::vector<std::unique_ptr<Expression>>& selectList() const { return select_list_; }
     const std::string& fromTable() const { return from_table_; }
     Expression* whereCondition() const { return where_condition_.get(); }
+
+    // Phase 4: 获取JOIN表
+    const std::vector<std::unique_ptr<JoinTable>>& joinTables() const { return join_tables_; }
+
+    // Phase 4: 获取所有涉及的表
+    std::vector<std::string> getAllTables() const {
+        std::vector<std::string> tables;
+        if (!from_table_.empty()) {
+            tables.push_back(from_table_);
+        }
+        for (const auto& join : join_tables_) {
+            tables.push_back(join->tableName());
+        }
+        return tables;
+    }
 
     std::string toString() const override {
         std::string result = "SELECT ";
@@ -195,6 +246,22 @@ public:
         }
         if (!from_table_.empty()) {
             result += " FROM " + from_table_;
+        }
+        // Phase 4: 输出JOIN信息
+        for (const auto& join : join_tables_) {
+            switch (join->joinType()) {
+                case JoinType::INNER:
+                    result += " JOIN " + join->tableName();
+                    break;
+                case JoinType::LEFT:
+                    result += " LEFT JOIN " + join->tableName();
+                    break;
+                default:
+                    result += " JOIN " + join->tableName();
+            }
+            if (join->joinCondition()) {
+                result += " ON " + join->joinCondition()->toString();
+            }
         }
         if (where_condition_) {
             result += " WHERE " + where_condition_->toString();
@@ -206,6 +273,7 @@ private:
     std::vector<std::unique_ptr<Expression>> select_list_;
     std::string from_table_;
     std::unique_ptr<Expression> where_condition_;
+    std::vector<std::unique_ptr<JoinTable>> join_tables_;  // Phase 4
 };
 
 // INSERT 语句
@@ -416,6 +484,83 @@ public:
     std::string toString() const override {
         return "ROLLBACK";
     }
+};
+
+// Phase 4: CREATE INDEX 语句
+class CreateIndexStmt : public Statement {
+public:
+    void setIndexName(const std::string& name) { index_name_ = name; }
+    void setTableName(const std::string& name) { table_name_ = name; }
+    void setColumnName(const std::string& name) { column_name_ = name; }
+    void setUnique(bool unique) { is_unique_ = unique; }
+
+    const std::string& indexName() const { return index_name_; }
+    const std::string& tableName() const { return table_name_; }
+    const std::string& columnName() const { return column_name_; }
+    bool isUnique() const { return is_unique_; }
+
+    std::string toString() const override {
+        std::string result = "CREATE ";
+        if (is_unique_) result += "UNIQUE ";
+        result += "INDEX " + index_name_;
+        result += " ON " + table_name_;
+        result += " (" + column_name_ + ")";
+        return result;
+    }
+
+private:
+    std::string index_name_;
+    std::string table_name_;
+    std::string column_name_;
+    bool is_unique_ = false;
+};
+
+// Phase 4: DROP INDEX 语句
+class DropIndexStmt : public Statement {
+public:
+    explicit DropIndexStmt(std::string index_name)
+        : index_name_(std::move(index_name)) {}
+
+    const std::string& indexName() const { return index_name_; }
+
+    std::string toString() const override {
+        return "DROP INDEX " + index_name_;
+    }
+
+private:
+    std::string index_name_;
+};
+
+// Phase 4: ANALYZE 语句
+class AnalyzeStmt : public Statement {
+public:
+    explicit AnalyzeStmt(std::string table_name)
+        : table_name_(std::move(table_name)) {}
+
+    const std::string& tableName() const { return table_name_; }
+
+    std::string toString() const override {
+        return "ANALYZE " + table_name_;
+    }
+
+private:
+    std::string table_name_;
+};
+
+// Phase 4: EXPLAIN 语句
+class ExplainStmt : public Statement {
+public:
+    explicit ExplainStmt(std::unique_ptr<Statement> stmt)
+        : statement_(std::move(stmt)) {}
+
+    Statement* innerStatement() const { return statement_.get(); }
+
+    std::string toString() const override {
+        return "EXPLAIN " + (statement_ ? statement_->toString() : "");
+    }
+
+private:
+    std::unique_ptr<Statement> statement_;
 };
 
 // AST 根节点
