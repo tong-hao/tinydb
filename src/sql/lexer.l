@@ -1,28 +1,23 @@
+%top{
+#include "parser_generated.h"
+}
+
 %{
-#include "ast.h"
-#include "parser.hpp"
 #include <string>
 #include <cstring>
 
-using namespace tinydb::sql;
+// 注意：不要在这里包含 ast.h 或使用 using namespace tinydb::sql
+// 以避免 OpType 枚举与 Bison token 冲突
 
-// 处理位置信息
-#define YY_USER_ACTION \
-    yylloc->first_line = yylloc->last_line; \
-    yylloc->first_column = yylloc->last_column; \
-    for(int i = 0; yytext[i] != '\0'; i++) { \
-        if(yytext[i] == '\n') { \
-            yylloc->last_line++; \
-            yylloc->last_column = 0; \
-        } else { \
-            yylloc->last_column++; \
-        } \
-    }
+// 声明外部 yylval
+extern YYSTYPE yylval;
+
+// Undefine Flex macros that conflict with token names
+#ifdef BEGIN
+#undef BEGIN
+#endif
 %}
 
-%option reentrant
-%option bison-bridge
-%option bison-locations
 %option noyywrap
 %option case-insensitive
 
@@ -32,12 +27,18 @@ LETTER      [a-zA-Z_]
 IDENTIFIER  {LETTER}({LETTER}|{DIGIT})*
 INTEGER     {DIGIT}+
 FLOAT       {DIGIT}+\.{DIGIT}*
-STRING      '\''[^']*'\''|\"[^\"]*\"
-WHITESPACE  [ \t\r\n]+
+STRING      '[^']*'|\"[^\"]*\"
+WHITESPACE  [ \t\r]+
+NEWLINE     \n
 
 %%
 
 {WHITESPACE}    { /* 忽略空白字符 */ }
+{NEWLINE}       { /* 忽略换行 */ }
+
+ /* SQL 注释 */
+"--".*          { /* 单行注释 */ }
+"/*"([^*]|\*+[^*/])*\*+"/"  { /* 多行注释 */ }
 
  /* 关键字 */
 "SELECT"        { return SELECT; }
@@ -96,46 +97,61 @@ WHITESPACE  [ \t\r\n]+
 "END"           { return END; }
 "IF"            { return IF; }
 "CAST"          { return CAST; }
+"DEFAULT"       { return DEFAULT; }
 "EXPLAIN"       { return EXPLAIN; }
 "DESCRIBE"      { return DESCRIBE; }
 "SHOW"          { return SHOW; }
 "DATABASES"     { return DATABASES; }
 "TABLES"        { return TABLES; }
 
+ /* 事务关键字 */
+"BEGIN"         { return BEGIN; }
+"TRANSACTION"   { return TRANSACTION; }
+"COMMIT"        { return COMMIT; }
+"ROLLBACK"      { return ROLLBACK; }
+
+ /* ALTER TABLE 关键字 */
+"ALTER"         { return ALTER; }
+"ADD"           { return ADD; }
+"COLUMN"        { return COLUMN; }
+
+ /* ANALYZE */
+"ANALYZE"       { return ANALYZE; }
+
  /* 数据类型 */
-"INT"           { yylval->str = strdup(yytext); return INT; }
-"INTEGER"       { yylval->str = strdup(yytext); return INT; }
-"BIGINT"        { yylval->str = strdup(yytext); return BIGINT; }
-"SMALLINT"      { yylval->str = strdup(yytext); return SMALLINT; }
-"TINYINT"       { yylval->str = strdup(yytext); return TINYINT; }
-"FLOAT"         { yylval->str = strdup(yytext); return FLOAT; }
-"DOUBLE"        { yylval->str = strdup(yytext); return DOUBLE; }
-"REAL"          { yylval->str = strdup(yytext); return REAL; }
-"DECIMAL"       { yylval->str = strdup(yytext); return DECIMAL; }
-"NUMERIC"       { yylval->str = strdup(yytext); return NUMERIC; }
-"CHAR"          { yylval->str = strdup(yytext); return CHAR; }
-"VARCHAR"       { yylval->str = strdup(yytext); return VARCHAR; }
-"TEXT"          { yylval->str = strdup(yytext); return TEXT; }
-"DATE"          { yylval->str = strdup(yytext); return DATE; }
-"TIME"          { yylval->str = strdup(yytext); return TIME; }
-"TIMESTAMP"     { yylval->str = strdup(yytext); return TIMESTAMP; }
-"DATETIME"      { yylval->str = strdup(yytext); return DATETIME; }
-"BOOLEAN"       { yylval->str = strdup(yytext); return BOOLEAN; }
-"BOOL"          { yylval->str = strdup(yytext); return BOOLEAN; }
+"INT"           { yylval.str = strdup(yytext); return INT; }
+"INTEGER"       { yylval.str = strdup(yytext); return INT; }
+"BIGINT"        { yylval.str = strdup(yytext); return BIGINT; }
+"SMALLINT"      { yylval.str = strdup(yytext); return SMALLINT; }
+"TINYINT"       { yylval.str = strdup(yytext); return TINYINT; }
+"FLOAT"         { yylval.str = strdup(yytext); return FLOAT; }
+"DOUBLE"        { yylval.str = strdup(yytext); return DOUBLE; }
+"REAL"          { yylval.str = strdup(yytext); return REAL; }
+"DECIMAL"       { yylval.str = strdup(yytext); return DECIMAL; }
+"NUMERIC"       { yylval.str = strdup(yytext); return NUMERIC; }
+"CHAR"          { yylval.str = strdup(yytext); return CHAR; }
+"VARCHAR"       { yylval.str = strdup(yytext); return VARCHAR; }
+"TEXT"          { yylval.str = strdup(yytext); return TEXT; }
+"DATE"          { yylval.str = strdup(yytext); return DATE; }
+"TIME"          { yylval.str = strdup(yytext); return TIME; }
+"TIMESTAMP"     { yylval.str = strdup(yytext); return TIMESTAMP; }
+"DATETIME"      { yylval.str = strdup(yytext); return DATETIME; }
+"BOOLEAN"       { yylval.str = strdup(yytext); return BOOLEAN; }
+"BOOL"          { yylval.str = strdup(yytext); return BOOLEAN; }
 
  /* 标识符 */
-{IDENTIFIER}    { yylval->str = strdup(yytext); return IDENTIFIER; }
+{IDENTIFIER}    { yylval.str = strdup(yytext); return IDENTIFIER; }
 
  /* 数字 */
-{INTEGER}       { yylval->str = strdup(yytext); return NUMBER; }
-{FLOAT}         { yylval->str = strdup(yytext); return NUMBER; }
+{INTEGER}       { yylval.str = strdup(yytext); return NUMBER; }
+{FLOAT}         { yylval.str = strdup(yytext); return NUMBER; }
 
  /* 字符串 */
-{STRING}        { 
+{STRING}        {
                     // 去掉引号
                     std::string s(yytext);
-                    yylval->str = strdup(s.substr(1, s.length()-2).c_str());
-                    return STRING_LITERAL; 
+                    yylval.str = strdup(s.substr(1, s.length()-2).c_str());
+                    return STRING_LITERAL;
                 }
 
  /* 运算符 */
@@ -149,8 +165,8 @@ WHITESPACE  [ \t\r\n]+
 "+"             { return PLUS; }
 "-"             { return MINUS; }
 "*"             { return STAR; }
-"/"             { return SLASH; }
-"%"             { return PERCENT; }
+"/"             { return DIV; }
+"%"             { return MOD; }
 "||"            { return CONCAT; }
 "("             { return LPAREN; }
 ")"             { return RPAREN; }
@@ -161,4 +177,8 @@ WHITESPACE  [ \t\r\n]+
  /* 其他字符 */
 .               { return yytext[0]; }
 
+<<EOF>>         { return 0; }
+
 %%
+
+/* 额外代码段 */

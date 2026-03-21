@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 #include "engine/executor.h"
 #include "storage/storage_engine.h"
-#include "sql/lexer.h"
 #include "sql/parser.h"
 
 using namespace tinydb;

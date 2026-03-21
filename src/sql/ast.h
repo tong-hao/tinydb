@@ -424,6 +424,8 @@ public:
     void setTable(const std::string& table) { table_ = table; }
     void setAction(ActionType action) { action_ = action; }
     void setNewTableName(const std::string& name) { new_table_name_ = name; }
+    void setColumnName(const std::string& name) { column_name_ = name; }
+    void setColumnType(const std::string& type) { column_type_ = type; }
     void setColumnDef(const std::string& name, const std::string& type) {
         column_name_ = name;
         column_type_ = type;
@@ -550,6 +552,7 @@ private:
 // Phase 4: EXPLAIN 语句
 class ExplainStmt : public Statement {
 public:
+    ExplainStmt() = default;
     explicit ExplainStmt(std::unique_ptr<Statement> stmt)
         : statement_(std::move(stmt)) {}
 

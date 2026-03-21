@@ -3,7 +3,6 @@
 #include <sstream>
 #include <algorithm>
 #include <cctype>
-#include "sql/lexer.h"
 #include "sql/parser.h"
 
 namespace tinydb {
@@ -33,14 +32,14 @@ ExecutionResult Executor::execute(const sql::AST& ast) {
         return executeSelect(select_stmt);
     } else if (auto insert_stmt = dynamic_cast<const sql::InsertStmt*>(stmt)) {
         return executeInsert(insert_stmt);
+    }  else if (auto update_stmt = dynamic_cast<const sql::UpdateStmt*>(stmt)) {
+        return executeUpdate(update_stmt);
+    } else if (auto delete_stmt = dynamic_cast<const sql::DeleteStmt*>(stmt)) {
+        return executeDelete(delete_stmt);
     } else if (auto create_stmt = dynamic_cast<const sql::CreateTableStmt*>(stmt)) {
         return executeCreateTable(create_stmt);
     } else if (auto drop_stmt = dynamic_cast<const sql::DropTableStmt*>(stmt)) {
         return executeDropTable(drop_stmt);
-    } else if (auto update_stmt = dynamic_cast<const sql::UpdateStmt*>(stmt)) {
-        return executeUpdate(update_stmt);
-    } else if (auto delete_stmt = dynamic_cast<const sql::DeleteStmt*>(stmt)) {
-        return executeDelete(delete_stmt);
     } else if (auto alter_stmt = dynamic_cast<const sql::AlterTableStmt*>(stmt)) {
         return executeAlterTable(alter_stmt);
     } else if (auto begin_stmt = dynamic_cast<const sql::BeginStmt*>(stmt)) {
@@ -66,14 +65,11 @@ ExecutionResult Executor::execute(const std::string &sql)
 {
     LOG_INFO("Executing SQL: " << sql);
 
-    // 使用 Lexer + Parser 解析 SQL
+    // 使用 Parser 直接解析 SQL (Bison/Flex 集成)
     ExecutionResult result;
     try
     {
-        sql::Lexer lexer(sql);
-        auto tokens = lexer.tokenize();
-
-        sql::Parser parser(tokens);
+        sql::Parser parser(sql);
         auto ast = parser.parse();
 
         if (ast && ast->statement())

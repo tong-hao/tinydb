@@ -191,6 +191,7 @@ struct SystemStatsView {
         , memory_usage_percent(0.0) {}
 };
 
+// TODO：很多方法没有被调用，功能缺失？
 // 诊断管理器（类似PostgreSQL的统计收集器）
 class DiagnosticsManager {
 public:

@@ -1,5 +1,4 @@
 #include <gtest/gtest.h>
-#include "sql/lexer.h"
 #include "sql/parser.h"
 #include "sql/ast.h"
 #include "engine/executor.h"
@@ -61,11 +60,9 @@ protected:
         }
     }
 
-    // 辅助函数：使用 Lexer 获取 tokens 然后创建 Parser
+    // 辅助函数：解析 SQL 并返回 AST
     std::unique_ptr<AST> parseSQL(const std::string& sql) {
-        Lexer lexer(sql);
-        auto tokens = lexer.tokenize();
-        Parser parser(tokens);
+        Parser parser(sql);
         return parser.parse();
     }
 
@@ -147,12 +144,24 @@ TEST_F(UpdateDeleteTest, UpdateWithoutWhere) {
     EXPECT_EQ(update_stmt->assignments().size(), 1);
 }
 
-// 测试UPDATE语句执行
+// 测试UPDATE语句执行并验证数据持久化
 TEST_F(UpdateDeleteTest, UpdateExecution) {
-    std::string sql = "UPDATE users SET age = 100 WHERE id = 1";
-
-    auto result = executor_->execute(sql);
+    // 先查询原始数据
+    auto result = executor_->execute("SELECT * FROM users WHERE id = 1");
     EXPECT_TRUE(result.success());
+    std::string before = result.message();
+    EXPECT_NE(before.find("25"), std::string::npos);  // Alice 初始 age 是 25
+
+    // 执行 UPDATE
+    result = executor_->execute("UPDATE users SET age = 100 WHERE id = 1");
+    EXPECT_TRUE(result.success());
+
+    // 验证更新后的数据
+    result = executor_->execute("SELECT * FROM users WHERE id = 1");
+    EXPECT_TRUE(result.success());
+    std::string after = result.message();
+    EXPECT_NE(after.find("100"), std::string::npos);  // age 应该变为 100
+    EXPECT_EQ(after.find("25"), std::string::npos);   // 不应该再看到 25
 }
 
 // 测试DELETE语句执行

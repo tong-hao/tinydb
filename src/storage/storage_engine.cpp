@@ -136,7 +136,7 @@ bool StorageEngine::update(const std::string& table_name, const TID& tid, const 
     // 记录到WAL（如果当前有活跃事务）
     Transaction* txn = transaction_manager_->getCurrentTransaction();
     if (txn && txn->getState() == TransactionState::ACTIVE) {
-        // 记录更新操作（实际上是先删除后插入）
+        // 记录删除操作
         txn->addDeleteRecord(table_name, old_tuple, tid);
     }
 
@@ -155,10 +155,10 @@ bool StorageEngine::update(const std::string& table_name, const TID& tid, const 
         return false;
     }
 
-    // 记录插入（用于回滚时删除）
-    if (txn && txn->getState() == TransactionState::ACTIVE) {
-        txn->addInsertRecord(table_name, new_tid);
-    }
+    // 注意：UPDATE 操作插入的新元组不应该被回滚删除
+    // 因为 UPDATE 是原子操作，回滚时应该恢复到旧状态（重新插入旧元组）
+    // 新插入的元组是更新后的有效数据，不应该被删除
+    // 所以这里不调用 txn->addInsertRecord()
 
     LOG_INFO("Updated tuple " << tid.toString() << " to " << new_tid.toString() << " in table " << table_name);
     return true;
@@ -350,6 +350,7 @@ bool StorageEngine::createIndex(const std::string& index_name, const std::string
         return false;
     }
 
+    // TODO: 这里太耗时了，应该通过后台线程进行
     // 扫描表数据并构建索引
     auto it = table_manager_->makeIterator(table_name);
     while (it.hasNext()) {

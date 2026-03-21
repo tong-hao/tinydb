@@ -150,6 +150,7 @@ std::vector<std::string> IndexManager::getIndexNamesForTable(const std::string& 
     return result;
 }
 
+// TODO: Insert语句执行的时候，这里应该被调用
 bool IndexManager::insertEntry(const std::string& table_name, const std::string& column_name,
                                const IndexKey& key, const TID& tid) {
     auto index = getColumnIndex(table_name, column_name);
