@@ -811,20 +811,77 @@ ExecutionResult Executor::executeAlterTable(const sql::AlterTableStmt* stmt) {
         return ExecutionResult::ok("ALTER TABLE executed (simulated - no storage engine)");
     }
 
-    if (stmt) {
-        std::string table_name = stmt->table();
-
-        // 检查表是否存在
-        if (!storage_engine_->tableExists(table_name)) {
-            return ExecutionResult::error("Table does not exist: " + table_name);
-        }
-
-        // TODO: 实现实际的 ALTER TABLE 逻辑
-        // 目前返回模拟结果
-        return ExecutionResult::ok("ALTER TABLE executed on table " + table_name);
+    if (!stmt) {
+        return ExecutionResult::error("Invalid ALTER TABLE statement");
     }
 
-    return ExecutionResult::ok("ALTER TABLE executed");
+    std::string table_name = stmt->table();
+
+    // 检查表是否存在
+    if (!storage_engine_->tableExists(table_name)) {
+        return ExecutionResult::error("Table does not exist: " + table_name);
+    }
+
+    // 根据动作类型执行不同的操作
+    switch (stmt->action()) {
+        case sql::AlterTableStmt::ActionType::ADD_COLUMN: {
+            // 添加列
+            storage::ColumnDef col_def(
+                stmt->columnName(),
+                parseDataType(stmt->columnType()),
+                parseTypeLength(stmt->columnType())
+            );
+
+            if (storage_engine_->addColumn(table_name, col_def)) {
+                return ExecutionResult::ok("ALTER TABLE ADD COLUMN " + stmt->columnName() +
+                                           " " + stmt->columnType() + " ON " + table_name);
+            } else {
+                return ExecutionResult::error("Failed to add column " + stmt->columnName() +
+                                              " to table " + table_name);
+            }
+        }
+
+        case sql::AlterTableStmt::ActionType::DROP_COLUMN: {
+            // 删除列
+            if (storage_engine_->dropColumn(table_name, stmt->columnName())) {
+                return ExecutionResult::ok("ALTER TABLE DROP COLUMN " + stmt->columnName() +
+                                           " FROM " + table_name);
+            } else {
+                return ExecutionResult::error("Failed to drop column " + stmt->columnName() +
+                                              " from table " + table_name);
+            }
+        }
+
+        case sql::AlterTableStmt::ActionType::MODIFY_COLUMN: {
+            // 修改列
+            storage::ColumnDef col_def(
+                stmt->columnName(),
+                parseDataType(stmt->columnType()),
+                parseTypeLength(stmt->columnType())
+            );
+
+            if (storage_engine_->modifyColumn(table_name, stmt->columnName(), col_def)) {
+                return ExecutionResult::ok("ALTER TABLE MODIFY COLUMN " + stmt->columnName() +
+                                           " " + stmt->columnType() + " ON " + table_name);
+            } else {
+                return ExecutionResult::error("Failed to modify column " + stmt->columnName() +
+                                              " in table " + table_name);
+            }
+        }
+
+        case sql::AlterTableStmt::ActionType::RENAME_TABLE: {
+            // 重命名表
+            std::string new_table_name = stmt->newTableName();
+            if (storage_engine_->renameTable(table_name, new_table_name)) {
+                return ExecutionResult::ok("ALTER TABLE RENAME " + table_name + " TO " + new_table_name);
+            } else {
+                return ExecutionResult::error("Failed to rename table " + table_name + " to " + new_table_name);
+            }
+        }
+
+        default:
+            return ExecutionResult::error("Unknown ALTER TABLE action");
+    }
 }
 
 storage::DataType Executor::parseDataType(const std::string& type_str) {
@@ -856,6 +913,24 @@ storage::DataType Executor::parseDataType(const std::string& type_str) {
 
     // 默认类型
     return storage::DataType::VARCHAR;
+}
+
+// 解析类型长度（如 VARCHAR(32) 返回 32）
+uint32_t Executor::parseTypeLength(const std::string& type_str) {
+    size_t paren_pos = type_str.find('(');
+    if (paren_pos != std::string::npos) {
+        size_t close_pos = type_str.find(')', paren_pos);
+        if (close_pos != std::string::npos) {
+            std::string len_str = type_str.substr(paren_pos + 1, close_pos - paren_pos - 1);
+            try {
+                return static_cast<uint32_t>(std::stoul(len_str));
+            } catch (...) {
+                return 0;
+            }
+        }
+    }
+    // 对于没有长度指定的类型，返回默认值
+    return 0;
 }
 
 // 表达式求值（阶段三新增：支持算术运算）

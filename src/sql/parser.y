@@ -81,7 +81,7 @@ extern AST* g_ast;
 %token IF CAST DEFAULT
 %token EXPLAIN ANALYZE DESCRIBE SHOW DATABASES TABLES
 %token BEGIN TRANSACTION COMMIT ROLLBACK
-%token ALTER ADD COLUMN
+%token ALTER ADD COLUMN MODIFY RENAME TO
 
 /* 数据类型 */
 %token INT BIGINT SMALLINT TINYINT
@@ -448,11 +448,62 @@ alter_table_stmt:
         free($5);
         free($6);
     }
+    | ALTER TABLE table_name ADD COLUMN column_name data_type {
+        $$ = new AlterTableStmt();
+        $$->setTable($3);
+        $$->setAction(AlterTableStmt::ActionType::ADD_COLUMN);
+        $$->setColumnDef($6, $7);
+        free($3);
+        free($6);
+        free($7);
+    }
     | ALTER TABLE table_name DROP column_name {
         $$ = new AlterTableStmt();
         $$->setTable($3);
         $$->setAction(AlterTableStmt::ActionType::DROP_COLUMN);
         $$->setColumnName($5);
+        free($3);
+        free($5);
+    }
+    | ALTER TABLE table_name DROP COLUMN column_name {
+        $$ = new AlterTableStmt();
+        $$->setTable($3);
+        $$->setAction(AlterTableStmt::ActionType::DROP_COLUMN);
+        $$->setColumnName($6);
+        free($3);
+        free($6);
+    }
+    | ALTER TABLE table_name MODIFY column_name data_type {
+        $$ = new AlterTableStmt();
+        $$->setTable($3);
+        $$->setAction(AlterTableStmt::ActionType::MODIFY_COLUMN);
+        $$->setColumnDef($5, $6);
+        free($3);
+        free($5);
+        free($6);
+    }
+    | ALTER TABLE table_name MODIFY COLUMN column_name data_type {
+        $$ = new AlterTableStmt();
+        $$->setTable($3);
+        $$->setAction(AlterTableStmt::ActionType::MODIFY_COLUMN);
+        $$->setColumnDef($6, $7);
+        free($3);
+        free($6);
+        free($7);
+    }
+    | ALTER TABLE table_name RENAME TO IDENTIFIER {
+        $$ = new AlterTableStmt();
+        $$->setTable($3);
+        $$->setAction(AlterTableStmt::ActionType::RENAME_TABLE);
+        $$->setNewTableName($6);
+        free($3);
+        free($6);
+    }
+    | ALTER TABLE table_name RENAME IDENTIFIER {
+        $$ = new AlterTableStmt();
+        $$->setTable($3);
+        $$->setAction(AlterTableStmt::ActionType::RENAME_TABLE);
+        $$->setNewTableName($5);
         free($3);
         free($5);
     }

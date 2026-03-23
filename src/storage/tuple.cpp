@@ -27,10 +27,23 @@ bool isFixedLength(DataType type) {
            type == DataType::BOOL;
 }
 
+// Helper function for case-insensitive string comparison
+static bool caseInsensitiveCompare(const std::string& a, const std::string& b) {
+    if (a.length() != b.length()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.length(); ++i) {
+        if (std::tolower(a[i]) != std::tolower(b[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Schema实现
 int Schema::findColumnIndex(const std::string& name) const {
     for (size_t i = 0; i < columns_.size(); ++i) {
-        if (columns_[i].name == name) {
+        if (caseInsensitiveCompare(columns_[i].name, name)) {
             return static_cast<int>(i);
         }
     }
@@ -43,6 +56,21 @@ const ColumnDef* Schema::getColumn(const std::string& name) const {
         return &columns_[idx];
     }
     return nullptr;
+}
+
+// 检查列是否存在
+bool Schema::columnExists(const std::string& name) const {
+    return findColumnIndex(name) >= 0;
+}
+
+// 删除列
+bool Schema::removeColumn(const std::string& name) {
+    int idx = findColumnIndex(name);
+    if (idx < 0) {
+        return false;
+    }
+    columns_.erase(columns_.begin() + idx);
+    return true;
 }
 
 size_t Schema::getRowMaxSize() const {

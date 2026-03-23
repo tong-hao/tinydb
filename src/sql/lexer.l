@@ -114,6 +114,9 @@ NEWLINE     \n
 "ALTER"         { return ALTER; }
 "ADD"           { return ADD; }
 "COLUMN"        { return COLUMN; }
+"MODIFY"        { return MODIFY; }
+"RENAME"        { return RENAME; }
+"TO"            { return TO; }
 
  /* ANALYZE */
 "ANALYZE"       { return ANALYZE; }

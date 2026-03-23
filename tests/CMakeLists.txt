@@ -65,6 +65,30 @@ target_link_libraries(test_update_delete
     GTest::gtest_main
 )
 
+# ALTER TABLE单元测试
+add_executable(test_alter_table
+    unit/test_alter_table.cpp
+)
+
+target_link_libraries(test_alter_table
+    engine
+    sql
+    storage
+    GTest::gtest_main
+)
+
+# CREATE TABLE 数据类型单元测试
+add_executable(test_create_table_types
+    unit/test_create_table_types.cpp
+)
+
+target_link_libraries(test_create_table_types
+    engine
+    sql
+    storage
+    GTest::gtest_main
+)
+
 # Phase 3: 表达式求值单元测试
 add_executable(test_expression
     unit/test_expression.cpp
@@ -196,6 +220,8 @@ gtest_discover_tests(test_connection)
 gtest_discover_tests(test_transaction)
 gtest_discover_tests(test_lock_manager)
 gtest_discover_tests(test_update_delete)
+gtest_discover_tests(test_alter_table)
+gtest_discover_tests(test_create_table_types)
 gtest_discover_tests(test_expression)
 gtest_discover_tests(test_executor)
 gtest_discover_tests(test_wal)

@@ -415,7 +415,7 @@ bool TableManager::createTable(const std::string& table_name, const Schema& sche
         }
     }
 
-    tables_[table_name] = meta;
+    tables_[common::toLower(table_name)] = meta;
     LOG_INFO("Table created: " << table_name << " (id=" << meta->table_id << ")");
     return true;
 }
@@ -473,6 +473,14 @@ bool TableManager::dropTable(const std::string& table_name) {
 std::shared_ptr<TableMeta> TableManager::getTable(const std::string& table_name) {
     std::lock_guard<std::mutex> lock(mutex_);
 
+    auto it = tables_.find(common::toLower(table_name));
+    if (it != tables_.end()) {
+        return it->second;
+    }
+    return nullptr;
+}
+
+std::shared_ptr<TableMeta> TableManager::getTableUnlocked(const std::string& table_name) {
     auto it = tables_.find(common::toLower(table_name));
     if (it != tables_.end()) {
         return it->second;
@@ -859,6 +867,243 @@ std::vector<ColumnMeta> TableManager::loadColumnMeta(uint32_t table_id) {
     }
 
     return columns;
+}
+
+// ALTER TABLE: 添加列
+bool TableManager::addColumn(const std::string& table_name, const ColumnDef& column_def) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto table_meta = getTableUnlocked(table_name);
+    if (!table_meta) {
+        LOG_ERROR("Table does not exist: " << table_name);
+        return false;
+    }
+
+    // 检查列是否已存在
+    if (table_meta->schema.columnExists(column_def.name)) {
+        LOG_ERROR("Column already exists: " << column_def.name);
+        return false;
+    }
+
+    // 获取新的列ID
+    uint16_t new_column_id = table_meta->schema.getColumnCount();
+
+    // 添加列到schema
+    table_meta->schema.addColumn(column_def.name, column_def.type, column_def.length);
+
+    // 保存列元数据到pg_attribute
+    ColumnMeta col_meta;
+    col_meta.table_id = table_meta->table_id;
+    col_meta.column_name = column_def.name;
+    col_meta.column_id = new_column_id;
+    col_meta.data_type = column_def.type;
+    col_meta.type_length = column_def.length;
+    col_meta.is_nullable = true;
+    col_meta.is_primary_key = false;
+    col_meta.default_value_offset = -1;
+
+    if (!saveColumnMeta(col_meta)) {
+        LOG_ERROR("Failed to save column metadata for: " << column_def.name);
+        return false;
+    }
+
+    // 更新表的元数据（schema已改变，需要保存）
+    if (!saveTableMeta(*table_meta)) {
+        LOG_ERROR("Failed to save table metadata after adding column");
+        return false;
+    }
+
+    LOG_INFO("Added column " << column_def.name << " to table " << table_name);
+    return true;
+}
+
+// ALTER TABLE: 删除列
+bool TableManager::dropColumn(const std::string& table_name, const std::string& column_name) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto table_meta = getTableUnlocked(table_name);
+    if (!table_meta) {
+        LOG_ERROR("Table does not exist: " << table_name);
+        return false;
+    }
+
+    // 检查列是否存在
+    int col_idx = table_meta->schema.findColumnIndex(column_name);
+    if (col_idx < 0) {
+        LOG_ERROR("Column does not exist: " << column_name);
+        return false;
+    }
+
+    // 检查是否只有一个列（不允许删除最后一个列）
+    if (table_meta->schema.getColumnCount() <= 1) {
+        LOG_ERROR("Cannot drop the only column in table");
+        return false;
+    }
+
+    // 从schema中删除列
+    table_meta->schema.removeColumn(column_name);
+
+    // 重新编号剩余的列
+    // 删除pg_attribute中的列元数据并重新保存
+    if (!removeColumnMeta(table_meta->table_id)) {
+        LOG_ERROR("Failed to remove column metadata");
+        return false;
+    }
+
+    // 重新保存所有列的元数据
+    for (size_t i = 0; i < table_meta->schema.getColumnCount(); ++i) {
+        const auto& col = table_meta->schema.getColumn(i);
+        ColumnMeta col_meta;
+        col_meta.table_id = table_meta->table_id;
+        col_meta.column_name = col.name;
+        col_meta.column_id = static_cast<uint16_t>(i);
+        col_meta.data_type = col.type;
+        col_meta.type_length = col.length;
+        col_meta.is_nullable = true;
+        col_meta.is_primary_key = false;
+        col_meta.default_value_offset = -1;
+
+        if (!saveColumnMeta(col_meta)) {
+            LOG_ERROR("Failed to save column metadata for: " << col.name);
+            return false;
+        }
+    }
+
+    // 更新表的元数据
+    if (!saveTableMeta(*table_meta)) {
+        LOG_ERROR("Failed to save table metadata after dropping column");
+        return false;
+    }
+
+    LOG_INFO("Dropped column " << column_name << " from table " << table_name);
+    return true;
+}
+
+// ALTER TABLE: 修改列
+bool TableManager::modifyColumn(const std::string& table_name, const std::string& column_name, const ColumnDef& new_def) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto table_meta = getTableUnlocked(table_name);
+    if (!table_meta) {
+        LOG_ERROR("Table does not exist: " << table_name);
+        return false;
+    }
+
+    // 检查列是否存在
+    int col_idx = table_meta->schema.findColumnIndex(column_name);
+    if (col_idx < 0) {
+        LOG_ERROR("Column does not exist: " << column_name);
+        return false;
+    }
+
+    // 修改列定义（保留列名，修改类型和长度）
+    // 注意：这里我们修改的是 schema 中的列定义
+    // 由于 schema 使用 vector 存储，我们可以直接修改
+    // 但是为了保持接口一致性，我们采用删除后添加的方式
+
+    // 获取原列的属性
+    const auto& old_col = table_meta->schema.getColumn(col_idx);
+
+    // 删除旧的列元数据从 pg_attribute
+    if (!removeColumnMeta(table_meta->table_id)) {
+        LOG_ERROR("Failed to remove old column metadata");
+        return false;
+    }
+
+    // 修改 schema 中的列定义
+    // 由于 ColumnDef 没有直接的修改方法，我们需要重新构建
+    // 这里我们采用一种简化的方式：删除后插入新定义
+
+    // 首先收集所有列定义
+    std::vector<ColumnDef> new_columns;
+    for (size_t i = 0; i < table_meta->schema.getColumnCount(); ++i) {
+        const auto& col = table_meta->schema.getColumn(i);
+        if (static_cast<int>(i) == col_idx) {
+            // 这是要修改的列，使用新定义
+            new_columns.emplace_back(column_name, new_def.type, new_def.length, new_def.is_nullable, new_def.is_primary_key);
+        } else {
+            // 其他列保持不变
+            new_columns.emplace_back(col.name, col.type, col.length, col.is_nullable, col.is_primary_key);
+        }
+    }
+
+    // 清除 schema 并重新添加所有列
+    // 由于 Schema 没有 clear 方法，我们需要逐个删除后重新添加
+    // 这里我们使用一个技巧：创建新的 Schema 然后替换
+    Schema new_schema;
+    for (const auto& col : new_columns) {
+        new_schema.addColumn(col);
+    }
+    table_meta->schema = std::move(new_schema);
+
+    // 重新保存所有列的元数据到 pg_attribute
+    for (size_t i = 0; i < table_meta->schema.getColumnCount(); ++i) {
+        const auto& col = table_meta->schema.getColumn(i);
+        ColumnMeta col_meta;
+        col_meta.table_id = table_meta->table_id;
+        col_meta.column_name = col.name;
+        col_meta.column_id = static_cast<uint16_t>(i);
+        col_meta.data_type = col.type;
+        col_meta.type_length = col.length;
+        col_meta.is_nullable = col.is_nullable;
+        col_meta.is_primary_key = col.is_primary_key;
+        col_meta.default_value_offset = -1;
+
+        if (!saveColumnMeta(col_meta)) {
+            LOG_ERROR("Failed to save column metadata for: " << col.name);
+            return false;
+        }
+    }
+
+    // 更新表的元数据
+    if (!saveTableMeta(*table_meta)) {
+        LOG_ERROR("Failed to save table metadata after modifying column");
+        return false;
+    }
+
+    LOG_INFO("Modified column " << column_name << " in table " << table_name);
+    return true;
+}
+
+// ALTER TABLE: 重命名表
+bool TableManager::renameTable(const std::string& old_name, const std::string& new_name) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    // 检查旧表是否存在
+    auto table_meta = getTableUnlocked(old_name);
+    if (!table_meta) {
+        LOG_ERROR("Table does not exist: " << old_name);
+        return false;
+    }
+
+    // 检查新表名是否已被使用
+    if (getTableUnlocked(new_name)) {
+        LOG_ERROR("Table already exists: " << new_name);
+        return false;
+    }
+
+    // 更新表元数据中的表名
+    table_meta->table_name = new_name;
+
+    // 更新系统表 pg_class 中的表名
+    // 首先删除旧的记录
+    if (!removeTableMeta(old_name)) {
+        LOG_ERROR("Failed to remove old table metadata");
+        return false;
+    }
+
+    // 然后添加新的记录
+    if (!saveTableMeta(*table_meta)) {
+        LOG_ERROR("Failed to save new table metadata");
+        return false;
+    }
+
+    // 更新内存中的映射
+    tables_.erase(common::toLower(old_name));
+    tables_[common::toLower(new_name)] = table_meta;
+
+    LOG_INFO("Renamed table " << old_name << " to " << new_name);
+    return true;
 }
 
 } // namespace storage

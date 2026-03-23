@@ -120,6 +120,18 @@ public:
     // Phase 4: 统计信息
     bool analyzeTable(const std::string& table_name);
 
+    // ALTER TABLE: 添加列
+    bool addColumn(const std::string& table_name, const ColumnDef& column_def);
+
+    // ALTER TABLE: 删除列
+    bool dropColumn(const std::string& table_name, const std::string& column_name);
+
+    // ALTER TABLE: 修改列
+    bool modifyColumn(const std::string& table_name, const std::string& column_name, const ColumnDef& new_def);
+
+    // ALTER TABLE: 重命名表
+    bool renameTable(const std::string& old_name, const std::string& new_name);
+
 private:
     StorageConfig config_;
     std::unique_ptr<DiskManager> disk_manager_;

@@ -75,6 +75,7 @@ private:
 
     // 类型转换辅助函数
     storage::DataType parseDataType(const std::string& type_str);
+    uint32_t parseTypeLength(const std::string& type_str);
 
     // WHERE 条件评估
     bool evaluateWhereCondition(const storage::Tuple& tuple, const sql::Expression* condition, const storage::Schema* schema);

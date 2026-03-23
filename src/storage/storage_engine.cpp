@@ -427,5 +427,41 @@ bool StorageEngine::analyzeTable(const std::string& table_name) {
     return stats_manager_->analyzeTable(table_name, table_manager_.get());
 }
 
+// ALTER TABLE: 添加列
+bool StorageEngine::addColumn(const std::string& table_name, const ColumnDef& column_def) {
+    if (!initialized_) {
+        LOG_ERROR("Storage engine not initialized");
+        return false;
+    }
+    return table_manager_->addColumn(table_name, column_def);
+}
+
+// ALTER TABLE: 删除列
+bool StorageEngine::dropColumn(const std::string& table_name, const std::string& column_name) {
+    if (!initialized_) {
+        LOG_ERROR("Storage engine not initialized");
+        return false;
+    }
+    return table_manager_->dropColumn(table_name, column_name);
+}
+
+// ALTER TABLE: 修改列
+bool StorageEngine::modifyColumn(const std::string& table_name, const std::string& column_name, const ColumnDef& new_def) {
+    if (!initialized_) {
+        LOG_ERROR("Storage engine not initialized");
+        return false;
+    }
+    return table_manager_->modifyColumn(table_name, column_name, new_def);
+}
+
+// ALTER TABLE: 重命名表
+bool StorageEngine::renameTable(const std::string& old_name, const std::string& new_name) {
+    if (!initialized_) {
+        LOG_ERROR("Storage engine not initialized");
+        return false;
+    }
+    return table_manager_->renameTable(old_name, new_name);
+}
+
 } // namespace storage
 } // namespace tinydb

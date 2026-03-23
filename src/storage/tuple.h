@@ -71,6 +71,12 @@ public:
     // 获取列索引
     const ColumnDef* getColumn(const std::string& name) const;
 
+    // 检查列是否存在
+    bool columnExists(const std::string& name) const;
+
+    // 删除列
+    bool removeColumn(const std::string& name);
+
     // 计算行的最大存储大小（所有列都非空且为最大长度）
     size_t getRowMaxSize() const;
 

@@ -94,3 +94,137 @@ TEST_F(LexerTest, SQLWithSemicolon) {
     ASSERT_NE(ast, nullptr);
     ASSERT_NE(ast->statement(), nullptr);
 }
+
+// ALTER TABLE 测试
+TEST_F(LexerTest, ParseAlterTableAddColumn) {
+    auto ast = parseSQL("ALTER TABLE users ADD age INT");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto alter_stmt = dynamic_cast<AlterTableStmt*>(ast->statement());
+    ASSERT_NE(alter_stmt, nullptr);
+    EXPECT_EQ(alter_stmt->table(), "users");
+    EXPECT_EQ(alter_stmt->action(), AlterTableStmt::ActionType::ADD_COLUMN);
+    EXPECT_EQ(alter_stmt->columnName(), "age");
+}
+
+TEST_F(LexerTest, ParseAlterTableDropColumn) {
+    auto ast = parseSQL("ALTER TABLE users DROP age");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto alter_stmt = dynamic_cast<AlterTableStmt*>(ast->statement());
+    ASSERT_NE(alter_stmt, nullptr);
+    EXPECT_EQ(alter_stmt->table(), "users");
+    EXPECT_EQ(alter_stmt->action(), AlterTableStmt::ActionType::DROP_COLUMN);
+    EXPECT_EQ(alter_stmt->columnName(), "age");
+}
+
+TEST_F(LexerTest, ParseAlterTableModifyColumn) {
+    auto ast = parseSQL("ALTER TABLE users MODIFY age BIGINT");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto alter_stmt = dynamic_cast<AlterTableStmt*>(ast->statement());
+    ASSERT_NE(alter_stmt, nullptr);
+    EXPECT_EQ(alter_stmt->table(), "users");
+    EXPECT_EQ(alter_stmt->action(), AlterTableStmt::ActionType::MODIFY_COLUMN);
+    EXPECT_EQ(alter_stmt->columnName(), "age");
+}
+
+TEST_F(LexerTest, ParseAlterTableRenameTable) {
+    auto ast = parseSQL("ALTER TABLE users RENAME TO customers");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto alter_stmt = dynamic_cast<AlterTableStmt*>(ast->statement());
+    ASSERT_NE(alter_stmt, nullptr);
+    EXPECT_EQ(alter_stmt->table(), "users");
+    EXPECT_EQ(alter_stmt->action(), AlterTableStmt::ActionType::RENAME_TABLE);
+    EXPECT_EQ(alter_stmt->newTableName(), "customers");
+}
+
+// CREATE INDEX 测试
+TEST_F(LexerTest, ParseCreateIndex) {
+    auto ast = parseSQL("CREATE INDEX idx_name ON users (name)");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto index_stmt = dynamic_cast<CreateIndexStmt*>(ast->statement());
+    ASSERT_NE(index_stmt, nullptr);
+    EXPECT_EQ(index_stmt->indexName(), "idx_name");
+    EXPECT_EQ(index_stmt->tableName(), "users");
+    EXPECT_EQ(index_stmt->columnName(), "name");
+    EXPECT_FALSE(index_stmt->isUnique());
+}
+
+TEST_F(LexerTest, ParseCreateUniqueIndex) {
+    auto ast = parseSQL("CREATE UNIQUE INDEX idx_name ON users (name)");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto index_stmt = dynamic_cast<CreateIndexStmt*>(ast->statement());
+    ASSERT_NE(index_stmt, nullptr);
+    EXPECT_EQ(index_stmt->indexName(), "idx_name");
+    EXPECT_TRUE(index_stmt->isUnique());
+}
+
+// DROP INDEX 测试
+TEST_F(LexerTest, ParseDropIndex) {
+    auto ast = parseSQL("DROP INDEX idx_name");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto drop_stmt = dynamic_cast<DropIndexStmt*>(ast->statement());
+    ASSERT_NE(drop_stmt, nullptr);
+    EXPECT_EQ(drop_stmt->indexName(), "idx_name");
+}
+
+// BEGIN/COMMIT/ROLLBACK 测试
+TEST_F(LexerTest, ParseBegin) {
+    auto ast = parseSQL("BEGIN");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto begin_stmt = dynamic_cast<BeginStmt*>(ast->statement());
+    ASSERT_NE(begin_stmt, nullptr);
+}
+
+TEST_F(LexerTest, ParseCommit) {
+    auto ast = parseSQL("COMMIT");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto commit_stmt = dynamic_cast<CommitStmt*>(ast->statement());
+    ASSERT_NE(commit_stmt, nullptr);
+}
+
+TEST_F(LexerTest, ParseRollback) {
+    auto ast = parseSQL("ROLLBACK");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto rollback_stmt = dynamic_cast<RollbackStmt*>(ast->statement());
+    ASSERT_NE(rollback_stmt, nullptr);
+}
+
+// ANALYZE 测试
+TEST_F(LexerTest, ParseAnalyze) {
+    auto ast = parseSQL("ANALYZE users");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto analyze_stmt = dynamic_cast<AnalyzeStmt*>(ast->statement());
+    ASSERT_NE(analyze_stmt, nullptr);
+    EXPECT_EQ(analyze_stmt->tableName(), "users");
+}
+
+// EXPLAIN 测试
+TEST_F(LexerTest, ParseExplain) {
+    auto ast = parseSQL("EXPLAIN SELECT * FROM users");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto explain_stmt = dynamic_cast<ExplainStmt*>(ast->statement());
+    ASSERT_NE(explain_stmt, nullptr);
+}
