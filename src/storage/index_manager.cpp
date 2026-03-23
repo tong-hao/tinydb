@@ -13,24 +13,24 @@ IndexManager::IndexManager(BufferPoolManager* buffer_pool)
 IndexManager::~IndexManager() = default;
 
 bool IndexManager::initializeSystemTables() {
-    // pg_index 系统表用于存储索引元数据
-    pg_index_meta_ = std::make_shared<TableMeta>();
-    pg_index_meta_->table_id = 3;  // pg_class=1, pg_attribute=2, pg_index=3
-    pg_index_meta_->table_name = "pg_index";
-    pg_index_meta_->schema_name = "pg_catalog";
-    pg_index_meta_->first_page_id = INVALID_PAGE_ID;
-    pg_index_meta_->tuple_count = 0;
+    // tn_index 系统表用于存储索引元数据
+    tn_index_meta_ = std::make_shared<TableMeta>();
+    tn_index_meta_->table_id = 3;  // tn_class=1, tn_attribute=2, tn_index=3
+    tn_index_meta_->table_name = "tn_index";
+    tn_index_meta_->schema_name = "tn_catalog";
+    tn_index_meta_->first_page_id = INVALID_PAGE_ID;
+    tn_index_meta_->tuple_count = 0;
 
-    pg_index_meta_->schema = Schema();
-    pg_index_meta_->schema.addColumn("index_id", DataType::INT32, sizeof(int32_t));
-    pg_index_meta_->schema.addColumn("index_name", DataType::VARCHAR, 128);
-    pg_index_meta_->schema.addColumn("table_id", DataType::INT32, sizeof(int32_t));
-    pg_index_meta_->schema.addColumn("table_name", DataType::VARCHAR, 128);
-    pg_index_meta_->schema.addColumn("column_name", DataType::VARCHAR, 128);
-    pg_index_meta_->schema.addColumn("column_id", DataType::INT32, sizeof(int32_t));
-    pg_index_meta_->schema.addColumn("root_page_id", DataType::INT32, sizeof(int32_t));
-    pg_index_meta_->schema.addColumn("is_unique", DataType::INT32, sizeof(int32_t));
-    pg_index_meta_->schema.addColumn("key_count", DataType::INT32, sizeof(int32_t));
+    tn_index_meta_->schema = Schema();
+    tn_index_meta_->schema.addColumn("index_id", DataType::INT32, sizeof(int32_t));
+    tn_index_meta_->schema.addColumn("index_name", DataType::VARCHAR, 128);
+    tn_index_meta_->schema.addColumn("table_id", DataType::INT32, sizeof(int32_t));
+    tn_index_meta_->schema.addColumn("table_name", DataType::VARCHAR, 128);
+    tn_index_meta_->schema.addColumn("column_name", DataType::VARCHAR, 128);
+    tn_index_meta_->schema.addColumn("column_id", DataType::INT32, sizeof(int32_t));
+    tn_index_meta_->schema.addColumn("root_page_id", DataType::INT32, sizeof(int32_t));
+    tn_index_meta_->schema.addColumn("is_unique", DataType::INT32, sizeof(int32_t));
+    tn_index_meta_->schema.addColumn("key_count", DataType::INT32, sizeof(int32_t));
 
     return true;
 }
@@ -173,18 +173,18 @@ bool IndexManager::deleteEntry(const std::string& table_name, const std::string&
 
 bool IndexManager::loadIndexes() {
     // 从系统表加载索引
-    // 这里简化处理，实际应该从pg_index表读取
+    // 这里简化处理，实际应该从tn_index表读取
     return true;
 }
 
 bool IndexManager::saveIndexMeta(const IndexMeta& meta) {
-    // 保存到pg_index系统表
+    // 保存到tn_index系统表
     // 简化处理，实际应该插入到系统表
     return true;
 }
 
 bool IndexManager::removeIndexMeta(const std::string& index_name) {
-    // 从pg_index系统表删除
+    // 从tn_index系统表删除
     // 简化处理
     return true;
 }

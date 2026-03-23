@@ -34,10 +34,10 @@ void SystemViewManager::initialize(storage::DiagnosticsManager* diag_mgr,
 }
 
 void SystemViewManager::registerSystemViews() {
-    // pg_stat_activity - 当前活动
-    views_["pg_stat_activity"] = {
-        "pg_stat_activity",
-        "pg_catalog",
+    // tn_stat_activity - 当前活动
+    views_["tn_stat_activity"] = {
+        "tn_stat_activity",
+        "tn_catalog",
         {
             {"pid", "INT", "进程ID"},
             {"usename", "TEXT", "用户名"},
@@ -53,10 +53,10 @@ void SystemViewManager::registerSystemViews() {
         "当前数据库活动会话"
     };
 
-    // pg_stat_database - 数据库统计
-    views_["pg_stat_database"] = {
-        "pg_stat_database",
-        "pg_catalog",
+    // tn_stat_database - 数据库统计
+    views_["tn_stat_database"] = {
+        "tn_stat_database",
+        "tn_catalog",
         {
             {"datname", "TEXT", "数据库名"},
             {"numbackends", "INT", "后端数"},
@@ -79,10 +79,10 @@ void SystemViewManager::registerSystemViews() {
         "数据库级统计信息"
     };
 
-    // pg_stat_user_tables - 用户表统计
-    views_["pg_stat_user_tables"] = {
-        "pg_stat_user_tables",
-        "pg_catalog",
+    // tn_stat_user_tables - 用户表统计
+    views_["tn_stat_user_tables"] = {
+        "tn_stat_user_tables",
+        "tn_catalog",
         {
             {"relid", "INT", "表ID"},
             {"schemaname", "TEXT", "模式名"},
@@ -104,10 +104,10 @@ void SystemViewManager::registerSystemViews() {
         "用户表统计信息"
     };
 
-    // pg_stat_user_indexes - 用户索引统计
-    views_["pg_stat_user_indexes"] = {
-        "pg_stat_user_indexes",
-        "pg_catalog",
+    // tn_stat_user_indexes - 用户索引统计
+    views_["tn_stat_user_indexes"] = {
+        "tn_stat_user_indexes",
+        "tn_catalog",
         {
             {"relid", "INT", "表ID"},
             {"indexrelid", "INT", "索引ID"},
@@ -121,10 +121,10 @@ void SystemViewManager::registerSystemViews() {
         "用户索引统计信息"
     };
 
-    // pg_locks - 锁信息
-    views_["pg_locks"] = {
-        "pg_locks",
-        "pg_catalog",
+    // tn_locks - 锁信息
+    views_["tn_locks"] = {
+        "tn_locks",
+        "tn_catalog",
         {
             {"locktype", "TEXT", "锁类型"},
             {"database", "TEXT", "数据库名"},
@@ -145,10 +145,10 @@ void SystemViewManager::registerSystemViews() {
         "当前锁信息"
     };
 
-    // pg_stat_replication - 复制统计
-    views_["pg_stat_replication"] = {
-        "pg_stat_replication",
-        "pg_catalog",
+    // tn_stat_replication - 复制统计
+    views_["tn_stat_replication"] = {
+        "tn_stat_replication",
+        "tn_catalog",
         {
             {"pid", "INT", "进程ID"},
             {"usesysid", "INT", "用户系统ID"},
@@ -173,10 +173,10 @@ void SystemViewManager::registerSystemViews() {
         "流复制统计信息"
     };
 
-    // pg_tables - 表列表
-    views_["pg_tables"] = {
-        "pg_tables",
-        "pg_catalog",
+    // tn_tables - 表列表
+    views_["tn_tables"] = {
+        "tn_tables",
+        "tn_catalog",
         {
             {"schemaname", "TEXT", "模式名"},
             {"tablename", "TEXT", "表名"},
@@ -189,10 +189,10 @@ void SystemViewManager::registerSystemViews() {
         "表列表"
     };
 
-    // pg_indexes - 索引列表
-    views_["pg_indexes"] = {
-        "pg_indexes",
-        "pg_catalog",
+    // tn_indexes - 索引列表
+    views_["tn_indexes"] = {
+        "tn_indexes",
+        "tn_catalog",
         {
             {"schemaname", "TEXT", "模式名"},
             {"tablename", "TEXT", "表名"},
@@ -203,10 +203,10 @@ void SystemViewManager::registerSystemViews() {
         "索引列表"
     };
 
-    // pg_user - 用户列表
-    views_["pg_user"] = {
-        "pg_user",
-        "pg_catalog",
+    // tn_user - 用户列表
+    views_["tn_user"] = {
+        "tn_user",
+        "tn_catalog",
         {
             {"usename", "TEXT", "用户名"},
             {"usesysid", "INT", "用户系统ID"},
@@ -221,10 +221,10 @@ void SystemViewManager::registerSystemViews() {
         "用户列表"
     };
 
-    // pg_database - 数据库列表
-    views_["pg_database"] = {
-        "pg_database",
-        "pg_catalog",
+    // tn_database - 数据库列表
+    views_["tn_database"] = {
+        "tn_database",
+        "tn_catalog",
         {
             {"datname", "TEXT", "数据库名"},
             {"datdba", "INT", "数据库所有者"},
@@ -242,10 +242,10 @@ void SystemViewManager::registerSystemViews() {
         "数据库列表"
     };
 
-    // pg_backup_list - 备份列表
-    views_["pg_backup_list"] = {
-        "pg_backup_list",
-        "pg_catalog",
+    // tn_backup_list - 备份列表
+    views_["tn_backup_list"] = {
+        "tn_backup_list",
+        "tn_catalog",
         {
             {"backup_id", "TEXT", "备份ID"},
             {"backup_name", "TEXT", "备份名称"},
@@ -262,10 +262,10 @@ void SystemViewManager::registerSystemViews() {
         "备份列表"
     };
 
-    // pg_restore_points - 恢复点列表
-    views_["pg_restore_points"] = {
-        "pg_restore_points",
-        "pg_catalog",
+    // tn_restore_points - 恢复点列表
+    views_["tn_restore_points"] = {
+        "tn_restore_points",
+        "tn_catalog",
         {
             {"point_name", "TEXT", "恢复点名称"},
             {"timestamp", "TIMESTAMP", "时间戳"},
@@ -290,29 +290,29 @@ SystemViewResult SystemViewManager::querySystemView(const std::string& view_name
     }
 
     // 根据视图名称路由到对应的查询方法
-    if (view_name == "pg_stat_activity") {
+    if (view_name == "tn_stat_activity") {
         return queryPgStatActivity();
-    } else if (view_name == "pg_stat_database") {
+    } else if (view_name == "tn_stat_database") {
         return queryPgStatDatabase();
-    } else if (view_name == "pg_stat_user_tables") {
+    } else if (view_name == "tn_stat_user_tables") {
         return queryPgStatUserTables();
-    } else if (view_name == "pg_stat_user_indexes") {
+    } else if (view_name == "tn_stat_user_indexes") {
         return queryPgStatUserIndexes();
-    } else if (view_name == "pg_locks") {
+    } else if (view_name == "tn_locks") {
         return queryPgLocks();
-    } else if (view_name == "pg_stat_replication") {
+    } else if (view_name == "tn_stat_replication") {
         return queryPgStatReplication();
-    } else if (view_name == "pg_tables") {
+    } else if (view_name == "tn_tables") {
         return queryPgTables();
-    } else if (view_name == "pg_indexes") {
+    } else if (view_name == "tn_indexes") {
         return queryPgIndexes();
-    } else if (view_name == "pg_user") {
+    } else if (view_name == "tn_user") {
         return queryPgUser();
-    } else if (view_name == "pg_database") {
+    } else if (view_name == "tn_database") {
         return queryPgDatabase();
-    } else if (view_name == "pg_backup_list") {
+    } else if (view_name == "tn_backup_list") {
         return queryBackupList();
-    } else if (view_name == "pg_restore_points") {
+    } else if (view_name == "tn_restore_points") {
         return queryRestorePoints();
     }
 
@@ -526,7 +526,7 @@ SystemViewResult SystemViewManager::queryPgTables() {
             row.push_back("public");
             row.push_back(stats.table_name);
             row.push_back("tinydb");  // tableowner
-            row.push_back("pg_default");  // tablespace
+            row.push_back("tn_default");  // tablespace
             row.push_back("t");  // hasindexes
             row.push_back("f");  // hasrules
             row.push_back("f");  // hastriggers
@@ -548,7 +548,7 @@ SystemViewResult SystemViewManager::queryPgIndexes() {
             row.push_back("public");
             row.push_back(stats.table_name);
             row.push_back(stats.index_name);
-            row.push_back("pg_default");
+            row.push_back("tn_default");
             row.push_back("CREATE INDEX " + stats.index_name + " ON " + stats.table_name);
             result.rows.push_back(row);
         }
@@ -607,7 +607,7 @@ SystemViewResult SystemViewManager::queryPgDatabase() {
     row.push_back("-1");  // datconnlimit
     row.push_back("10000");  // datlastsysoid
     row.push_back("3");  // datfrozenxid
-    row.push_back("pg_default");  // dattablespace
+    row.push_back("tn_default");  // dattablespace
     row.push_back("");  // datacl
     result.rows.push_back(row);
 

@@ -35,7 +35,7 @@ struct SystemViewResult {
     SystemViewResult() : success(true) {}
 };
 
-// 系统视图管理器 - 提供类似PostgreSQL的pg_catalog视图
+// 系统视图管理器 - 提供类似PostgreSQL的tn_catalog视图
 class SystemViewManager {
 public:
     SystemViewManager();
@@ -74,34 +74,34 @@ private:
     // 注册系统视图
     void registerSystemViews();
 
-    // 查询 pg_stat_activity
+    // 查询 tn_stat_activity
     SystemViewResult queryPgStatActivity();
 
-    // 查询 pg_stat_database
+    // 查询 tn_stat_database
     SystemViewResult queryPgStatDatabase();
 
-    // 查询 pg_stat_user_tables
+    // 查询 tn_stat_user_tables
     SystemViewResult queryPgStatUserTables();
 
-    // 查询 pg_stat_user_indexes
+    // 查询 tn_stat_user_indexes
     SystemViewResult queryPgStatUserIndexes();
 
-    // 查询 pg_locks
+    // 查询 tn_locks
     SystemViewResult queryPgLocks();
 
-    // 查询 pg_stat_replication
+    // 查询 tn_stat_replication
     SystemViewResult queryPgStatReplication();
 
-    // 查询 pg_tables
+    // 查询 tn_tables
     SystemViewResult queryPgTables();
 
-    // 查询 pg_indexes
+    // 查询 tn_indexes
     SystemViewResult queryPgIndexes();
 
-    // 查询 pg_user
+    // 查询 tn_user
     SystemViewResult queryPgUser();
 
-    // 查询 pg_database
+    // 查询 tn_database
     SystemViewResult queryPgDatabase();
 
     // 查询备份列表

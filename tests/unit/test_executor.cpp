@@ -211,7 +211,7 @@ TEST_F(ExecutorTest, ExpressionEvaluationConstant) {
 
 // 测试系统表查询
 TEST_F(ExecutorTest, QuerySystemTable) {
-    auto result = executor_->execute("SELECT * FROM pg_class");
+    auto result = executor_->execute("SELECT * FROM tn_class");
     EXPECT_TRUE(result.success()) << result.message();
     EXPECT_NE(result.message().find("accounts"), std::string::npos);
 }

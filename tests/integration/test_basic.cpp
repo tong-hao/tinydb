@@ -17,9 +17,9 @@ protected:
         if (server_pid_ == 0) {
             // 子进程：启动服务器
             // Try multiple paths to find the server binary
-            execl("../../bin/dbserver", "dbserver", "-p", "5434", "-d", "/tmp/tinydb_test_data", nullptr);
-            execl("../bin/dbserver", "dbserver", "-p", "5434", "-d", "/tmp/tinydb_test_data", nullptr);
-            execl("./bin/dbserver", "dbserver", "-p", "5434", "-d", "/tmp/tinydb_test_data", nullptr);
+            execl("../../bin/tinydb-server", "tinydb-server", "-p", "5434", "-d", "/tmp/tinydb_test_data", nullptr);
+            execl("../bin/tinydb-server", "tinydb-server", "-p", "5434", "-d", "/tmp/tinydb_test_data", nullptr);
+            execl("./bin/tinydb-server", "tinydb-server", "-p", "5434", "-d", "/tmp/tinydb_test_data", nullptr);
             exit(1);
         }
 

@@ -306,7 +306,7 @@ ExecutionResult Executor::executeSelect(const sql::SelectStmt* stmt) {
     }
 
     // 原有的SELECT逻辑...
-    if (table_name == "pg_class" || table_name == "pg_attribute") {
+    if (table_name == "tn_class" || table_name == "tn_attribute") {
         // 查询系统表
         std::string result = "Table: " + table_name + "\n";
         result += "--------------------\n";

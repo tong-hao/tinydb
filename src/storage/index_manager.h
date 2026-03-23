@@ -64,12 +64,12 @@ private:
     uint32_t next_index_id_;
 
     // 系统表元数据
-    std::shared_ptr<TableMeta> pg_index_meta_;
+    std::shared_ptr<TableMeta> tn_index_meta_;
 
     // 初始化系统表
     bool initializeSystemTables();
 
-    // 从pg_index加载索引
+    // 从tn_index加载索引
     bool loadIndexFromPgIndex();
 
     // 获取索引元数据（内部使用）

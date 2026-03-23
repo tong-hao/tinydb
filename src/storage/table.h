@@ -11,7 +11,7 @@
 namespace tinydb {
 namespace storage {
 
-// 表元数据（对应pg_class）
+// 表元数据（对应tn_class）
 struct TableMeta {
     uint32_t table_id;              // 表ID
     std::string table_name;         // 表名
@@ -31,7 +31,7 @@ struct TableMeta {
     bool deserialize(const uint8_t* data, size_t size);
 };
 
-// 列元数据（对应pg_attribute）
+// 列元数据（对应tn_attribute）
 struct ColumnMeta {
     uint32_t table_id;              // 所属表ID
     std::string column_name;        // 列名
@@ -135,25 +135,25 @@ private:
     uint32_t next_table_id_;
 
     // 系统表元数据
-    std::shared_ptr<TableMeta> pg_class_meta_;
-    std::shared_ptr<TableMeta> pg_attribute_meta_;
+    std::shared_ptr<TableMeta> tn_class_meta_;
+    std::shared_ptr<TableMeta> tn_attribute_meta_;
 
     // 初始化系统表
     bool initializeSystemTables();
 
-    // 从pg_class加载表
+    // 从tn_class加载表
     bool loadTableFromPgClass();
 
-    // 保存表元数据到pg_class
+    // 保存表元数据到tn_class
     bool saveTableMeta(const TableMeta& meta);
 
-    // 删除表元数据从pg_class
+    // 删除表元数据从tn_class
     bool removeTableMeta(const std::string& table_name);
 
-    // 保存列元数据到pg_attribute
+    // 保存列元数据到tn_attribute
     bool saveColumnMeta(const ColumnMeta& meta);
 
-    // 删除列元数据从pg_attribute
+    // 删除列元数据从tn_attribute
     bool removeColumnMeta(uint32_t table_id);
 
     // 获取表的列元数据

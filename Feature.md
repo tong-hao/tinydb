@@ -33,7 +33,7 @@
 | 页式存储 | 8KB/16KB定长页，页头管理，空闲空间管理 | 单表支持100万行，随机读写性能测试 |
 | 堆表存储 | 行格式设计（定长字段），TID（页号+槽位）定位 | 插入1万行，逐行读取验证数据完整性 |
 | 缓冲区管理 | LRU缓冲池，脏页刷盘，WAL预写日志雏形 | 崩溃恢复测试（kill -9后数据不丢） |
-| 系统表 | `pg_class`（表元数据）、`pg_attribute`（列元数据） | 能`SELECT * FROM pg_class`看到所有表 |
+| 系统表 | `tn_class`（表元数据）、`tn_attribute`（列元数据） | 能`SELECT * FROM tn_class`看到所有表 |
 | DDL执行 | `CREATE TABLE`（仅定长类型：INT/BIGINT/CHAR/VARCHAR）、`DROP TABLE` | 完整DDL生命周期测试 |
 |  catalog缓存 | 表结构缓存，减少系统表查询 | 重复查询性能提升10倍+ |
 
@@ -43,7 +43,7 @@
 ```sql
 CREATE TABLE users (id INT, name VARCHAR(32));
 INSERT INTO users VALUES (1, 'Alice');  -- 阶段三才实现，此处仅准备存储
-SELECT * FROM pg_class WHERE relname = 'users';  -- 能看到新表
+SELECT * FROM tn_class WHERE relname = 'users';  -- 能看到新表
 ```
 
 ---
@@ -114,7 +114,7 @@ WHERE o.user_id = 5;
 | 备份恢复 | 物理备份（全量+增量），PITR（基于时间点） | 模拟磁盘损坏，恢复到任意时间点 |
 | 复制架构 | 主从异步复制，WAL传输 | 主库写入，从库延迟<1秒 |
 | 权限系统 | 角色、Schema级权限、列级权限 | `GRANT SELECT ON t TO user1` 生效 |
-| 监控诊断 | `pg_stat_*` 统计视图，慢查询日志，连接状态 | Web仪表盘或SQL查询监控指标 |
+| 监控诊断 | `tn_stat_*` 统计视图，慢查询日志，连接状态 | Web仪表盘或SQL查询监控指标 |
 | 工具链 | 命令行客户端（类似psql）、数据导入导出（CSV/SQL） | 功能对标mysql-client/psql |
 
 **参考实现**：PostgreSQL的流复制、权限系统
@@ -139,7 +139,7 @@ WHERE o.user_id = 5;
 └─────────────────────────────────────────┘
                     │
 ┌───────────────────┼─────────────────────┐
-│              服务端 (dbserver)           │
+│              服务端 (tinydb-server)           │
 │  ┌────────────────┼────────────────┐   │
 │  │    连接管理器   │   协议解析器    │   │
 │  │  (Postmaster)  │  (Frontend/    │   │

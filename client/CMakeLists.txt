@@ -15,15 +15,6 @@ target_link_libraries(tinydb_client
     Threads::Threads
 )
 
-# 客户端可执行文件
-add_executable(dbclient
-    main.cpp
-)
-
-target_link_libraries(dbclient
-    tinydb_client
-    common
-)
 
 # 交互式 CLI 客户端（psql-like）
 add_executable(tinydb-cli

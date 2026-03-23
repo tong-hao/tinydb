@@ -92,8 +92,7 @@ After successful build, the following binaries will be created:
 ```
 build/
 ├── bin/
-│   ├── dbserver          # Database server
-│   ├── dbclient          # Simple client
+│   ├── tinydb-server          # Database server
 │   └── tinydb-cli        # Interactive CLI client
 └── tests/
     ├── test_lexer
@@ -216,7 +215,7 @@ RUN mkdir build && cd build && cmake .. && make -j$(nproc)
 
 EXPOSE 5432
 
-CMD ["./build/bin/dbserver", "-p", "5432"]
+CMD ["./build/bin/tinydb-server", "-p", "5432"]
 ```
 
 Build and run:

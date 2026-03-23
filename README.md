@@ -11,7 +11,7 @@
 - **权限系统**: 用户、角色和细粒度权限控制
 - **备份恢复**: 全量/增量备份，支持 PITR
 - **主从复制**: WAL 流复制架构
-- **监控诊断**: pg_stat_* 风格系统视图
+- **监控诊断**: tn_stat_* 风格系统视图
 - **命令行工具**: psql-like 交互客户端
 
 ## 快速开始
@@ -27,7 +27,7 @@ make -j4
 ### 启动服务器
 
 ```bash
-./bin/dbserver -p 5432
+./bin/tinydb-server -p 5432
 ```
 
 ### 使用命令行客户端
@@ -75,22 +75,22 @@ COMMIT;
 
 ```sql
 -- 查看当前活动
-SELECT * FROM pg_stat_activity;
+SELECT * FROM tn_stat_activity;
 
 -- 查看表统计
-SELECT * FROM pg_stat_user_tables;
+SELECT * FROM tn_stat_user_tables;
 
 -- 查看索引使用
-SELECT * FROM pg_stat_user_indexes;
+SELECT * FROM tn_stat_user_indexes;
 
 -- 查看锁信息
-SELECT * FROM pg_locks;
+SELECT * FROM tn_locks;
 
 -- 查看复制状态
-SELECT * FROM pg_stat_replication;
+SELECT * FROM tn_stat_replication;
 
 -- 查看备份列表
-SELECT * FROM pg_backup_list;
+SELECT * FROM tn_backup_list;
 ```
 
 ## 文档
@@ -106,9 +106,8 @@ SELECT * FROM pg_backup_list;
 ## 目录结构
 
 ```
-├── bin/                    # 可执行文件
-│   ├── dbserver           # 数据库服务器
-│   ├── dbclient           # 简单客户端
+├── bin/                   # 可执行文件
+│   ├── tinydb-server      # 数据库服务器
 │   └── tinydb-cli         # 交互式客户端
 ├── src/                   # 源代码
 │   ├── common/            # 公共组件

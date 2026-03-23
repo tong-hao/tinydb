@@ -291,10 +291,10 @@ TableManager::TableManager(BufferPoolManager* buffer_pool)
 TableManager::~TableManager() = default;
 
 bool TableManager::loadSystemTables() {
-    // 尝试从pg_class加载表
-    // 如果pg_class不存在，则初始化系统表
+    // 尝试从tn_class加载表
+    // 如果tn_class不存在，则初始化系统表
 
-    // 首先检查pg_class是否存在（通过读取第0页的特殊标记）
+    // 首先检查tn_class是否存在（通过读取第0页的特殊标记）
     // 简化实现：直接尝试初始化
     return initializeSystemTables();
 }
@@ -302,68 +302,68 @@ bool TableManager::loadSystemTables() {
 bool TableManager::initializeSystemTables() {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    // 创建pg_class的schema
-    Schema pg_class_schema;
-    pg_class_schema.addColumn("table_id", DataType::INT32);
-    pg_class_schema.addColumn("table_name", DataType::VARCHAR, 64);
-    pg_class_schema.addColumn("schema_name", DataType::VARCHAR, 64);
-    pg_class_schema.addColumn("first_page_id", DataType::INT32);
-    pg_class_schema.addColumn("last_page_id", DataType::INT32);
-    pg_class_schema.addColumn("tuple_count", DataType::INT32);
-    pg_class_schema.addColumn("page_count", DataType::INT32);
-    pg_class_schema.addColumn("next_tuple_id", DataType::INT32);
-    pg_class_schema.addColumn("schema_data", DataType::VARCHAR, 4096);
+    // 创建tn_class的schema
+    Schema tn_class_schema;
+    tn_class_schema.addColumn("table_id", DataType::INT32);
+    tn_class_schema.addColumn("table_name", DataType::VARCHAR, 64);
+    tn_class_schema.addColumn("schema_name", DataType::VARCHAR, 64);
+    tn_class_schema.addColumn("first_page_id", DataType::INT32);
+    tn_class_schema.addColumn("last_page_id", DataType::INT32);
+    tn_class_schema.addColumn("tuple_count", DataType::INT32);
+    tn_class_schema.addColumn("page_count", DataType::INT32);
+    tn_class_schema.addColumn("next_tuple_id", DataType::INT32);
+    tn_class_schema.addColumn("schema_data", DataType::VARCHAR, 4096);
 
-    // 创建pg_attribute的schema
-    Schema pg_attribute_schema;
-    pg_attribute_schema.addColumn("table_id", DataType::INT32);
-    pg_attribute_schema.addColumn("column_name", DataType::VARCHAR, 64);
-    pg_attribute_schema.addColumn("column_id", DataType::INT32);
-    pg_attribute_schema.addColumn("data_type", DataType::INT32);
-    pg_attribute_schema.addColumn("type_length", DataType::INT32);
-    pg_attribute_schema.addColumn("is_nullable", DataType::BOOL);
-    pg_attribute_schema.addColumn("is_primary_key", DataType::BOOL);
-    pg_attribute_schema.addColumn("default_value_offset", DataType::INT32);
+    // 创建tn_attribute的schema
+    Schema tn_attribute_schema;
+    tn_attribute_schema.addColumn("table_id", DataType::INT32);
+    tn_attribute_schema.addColumn("column_name", DataType::VARCHAR, 64);
+    tn_attribute_schema.addColumn("column_id", DataType::INT32);
+    tn_attribute_schema.addColumn("data_type", DataType::INT32);
+    tn_attribute_schema.addColumn("type_length", DataType::INT32);
+    tn_attribute_schema.addColumn("is_nullable", DataType::BOOL);
+    tn_attribute_schema.addColumn("is_primary_key", DataType::BOOL);
+    tn_attribute_schema.addColumn("default_value_offset", DataType::INT32);
 
-    // 分配pg_class和pg_attribute的表ID
-    pg_class_meta_ = std::make_shared<TableMeta>();
-    pg_class_meta_->table_id = 0;  // 系统表ID从0开始
-    pg_class_meta_->table_name = common::toLower("pg_class");
-    pg_class_meta_->schema_name = "pg_catalog";
-    pg_class_meta_->schema = pg_class_schema;
+    // 分配tn_class和tn_attribute的表ID
+    tn_class_meta_ = std::make_shared<TableMeta>();
+    tn_class_meta_->table_id = 0;  // 系统表ID从0开始
+    tn_class_meta_->table_name = common::toLower("tn_class");
+    tn_class_meta_->schema_name = "tn_catalog";
+    tn_class_meta_->schema = tn_class_schema;
 
-    pg_attribute_meta_ = std::make_shared<TableMeta>();
-    pg_attribute_meta_->table_id = 1;
-    pg_attribute_meta_->table_name = common::toLower("pg_attribute");
-    pg_attribute_meta_->schema_name = "pg_catalog";
-    pg_attribute_meta_->schema = pg_attribute_schema;
+    tn_attribute_meta_ = std::make_shared<TableMeta>();
+    tn_attribute_meta_->table_id = 1;
+    tn_attribute_meta_->table_name = common::toLower("tn_attribute");
+    tn_attribute_meta_->schema_name = "tn_catalog";
+    tn_attribute_meta_->schema = tn_attribute_schema;
 
     // 为系统表分配数据页
-    PageId pg_class_page;
-    BufferFrame* frame = buffer_pool_->newPage(&pg_class_page);
+    PageId tn_class_page;
+    BufferFrame* frame = buffer_pool_->newPage(&tn_class_page);
     if (!frame) {
-        LOG_ERROR("Failed to allocate page for pg_class");
+        LOG_ERROR("Failed to allocate page for tn_class");
         return false;
     }
-    pg_class_meta_->first_page_id = pg_class_page;
-    pg_class_meta_->last_page_id = pg_class_page;
-    pg_class_meta_->page_count = 1;
-    buffer_pool_->unpinPage(pg_class_page, true);
+    tn_class_meta_->first_page_id = tn_class_page;
+    tn_class_meta_->last_page_id = tn_class_page;
+    tn_class_meta_->page_count = 1;
+    buffer_pool_->unpinPage(tn_class_page, true);
 
-    PageId pg_attr_page;
-    frame = buffer_pool_->newPage(&pg_attr_page);
+    PageId tn_attr_page;
+    frame = buffer_pool_->newPage(&tn_attr_page);
     if (!frame) {
-        LOG_ERROR("Failed to allocate page for pg_attribute");
+        LOG_ERROR("Failed to allocate page for tn_attribute");
         return false;
     }
-    pg_attribute_meta_->first_page_id = pg_attr_page;
-    pg_attribute_meta_->last_page_id = pg_attr_page;
-    pg_attribute_meta_->page_count = 1;
-    buffer_pool_->unpinPage(pg_attr_page, true);
+    tn_attribute_meta_->first_page_id = tn_attr_page;
+    tn_attribute_meta_->last_page_id = tn_attr_page;
+    tn_attribute_meta_->page_count = 1;
+    buffer_pool_->unpinPage(tn_attr_page, true);
 
     // 保存系统表元数据
-    tables_["pg_class"] = pg_class_meta_;
-    tables_["pg_attribute"] = pg_attribute_meta_;
+    tables_["tn_class"] = tn_class_meta_;
+    tables_["tn_attribute"] = tn_attribute_meta_;
 
     next_table_id_ = 2;  // 下一个用户表ID从2开始
 
@@ -398,19 +398,19 @@ bool TableManager::createTable(const std::string& table_name, const Schema& sche
     meta->page_count = 1;
     meta->schema = schema;
 
-    // 保存到pg_class
+    // 保存到tn_class
     if (!saveTableMeta(*meta)) {
-        LOG_ERROR("Failed to save table meta to pg_class");
+        LOG_ERROR("Failed to save table meta to tn_class");
         return false;
     }
 
-    // 保存列信息到pg_attribute
+    // 保存列信息到tn_attribute
     for (size_t i = 0; i < schema.getColumnCount(); ++i) {
         ColumnMeta col_meta(schema.getColumn(i));
         col_meta.table_id = meta->table_id;
         col_meta.column_id = static_cast<uint16_t>(i);
         if (!saveColumnMeta(col_meta)) {
-            LOG_ERROR("Failed to save column meta to pg_attribute");
+            LOG_ERROR("Failed to save column meta to tn_attribute");
             return false;
         }
     }
@@ -431,15 +431,15 @@ bool TableManager::dropTable(const std::string& table_name) {
 
     auto meta = it->second;
 
-    // 从pg_class删除
+    // 从tn_class删除
     if (!removeTableMeta(table_name)) {
-        LOG_ERROR("Failed to remove table meta from pg_class");
+        LOG_ERROR("Failed to remove table meta from tn_class");
         return false;
     }
 
-    // 从pg_attribute删除列信息
+    // 从tn_attribute删除列信息
     if (!removeColumnMeta(meta->table_id)) {
-        LOG_ERROR("Failed to remove column meta from pg_attribute");
+        LOG_ERROR("Failed to remove column meta from tn_attribute");
         return false;
     }
 
@@ -499,7 +499,7 @@ std::vector<std::string> TableManager::getAllTableNames() {
     std::vector<std::string> names;
     for (const auto& pair : tables_) {
         // 只返回用户表，不包括系统表
-        if (pair.second->schema_name != "pg_catalog") {
+        if (pair.second->schema_name != "tn_catalog") {
             names.push_back(pair.first);
         }
     }
@@ -621,9 +621,9 @@ TableIterator TableManager::makeIterator(const std::string& table_name) {
 }
 
 bool TableManager::saveTableMeta(const TableMeta& meta) {
-    // 直接操作 pg_class 而不调用 insertTuple 以避免死锁
+    // 直接操作 tn_class 而不调用 insertTuple 以避免死锁
     // 序列化元组
-    Tuple tuple(&pg_class_meta_->schema);
+    Tuple tuple(&tn_class_meta_->schema);
     auto data = meta.serialize();
 
     // 构建元组字段
@@ -644,7 +644,7 @@ bool TableManager::saveTableMeta(const TableMeta& meta) {
     }
 
     // 查找或创建数据页
-    PageId page_id = pg_class_meta_->last_page_id;
+    PageId page_id = tn_class_meta_->last_page_id;
     BufferFrame* frame = buffer_pool_->fetchPage(page_id);
 
     if (!frame) {
@@ -671,8 +671,8 @@ bool TableManager::saveTableMeta(const TableMeta& meta) {
             buffer_pool_->unpinPage(page_id, true);
         }
 
-        pg_class_meta_->last_page_id = new_page_id;
-        pg_class_meta_->page_count++;
+        tn_class_meta_->last_page_id = new_page_id;
+        tn_class_meta_->page_count++;
         page_id = new_page_id;
     }
 
@@ -684,15 +684,15 @@ bool TableManager::saveTableMeta(const TableMeta& meta) {
 
     buffer_pool_->unpinPage(page_id, true);
 
-    pg_class_meta_->tuple_count++;
+    tn_class_meta_->tuple_count++;
 
     LOG_DEBUG("Saved table meta at (" << page_id << ", " << slot_id << ")");
     return true;
 }
 
 bool TableManager::removeTableMeta(const std::string& table_name) {
-    // 直接遍历 pg_class 找到并删除对应记录，不调用 makeIterator/deleteTuple 以避免死锁
-    PageId page_id = pg_class_meta_->first_page_id;
+    // 直接遍历 tn_class 找到并删除对应记录，不调用 makeIterator/deleteTuple 以避免死锁
+    PageId page_id = tn_class_meta_->first_page_id;
     std::string target_name = common::toLower(table_name);
 
     while (page_id != INVALID_PAGE_ID) {
@@ -709,7 +709,7 @@ bool TableManager::removeTableMeta(const std::string& table_name) {
 
             if (tuple_data && tuple_len > 0) {
                 // 反序列化元组获取表名（第2个字段，索引1）
-                Tuple tuple(&pg_class_meta_->schema);
+                Tuple tuple(&tn_class_meta_->schema);
                 if (tuple.deserialize(reinterpret_cast<const uint8_t*>(tuple_data), tuple_len)) {
                     if (tuple.getFieldCount() >= 2) {
                         std::string name = tuple.getField(1).getString();
@@ -717,7 +717,7 @@ bool TableManager::removeTableMeta(const std::string& table_name) {
                             // 删除此元组
                             page.deleteTuple(slot_id);
                             buffer_pool_->unpinPage(page_id, true);
-                            pg_class_meta_->tuple_count--;
+                            tn_class_meta_->tuple_count--;
                             LOG_DEBUG("Removed table meta for: " << table_name);
                             return true;
                         }
@@ -735,8 +735,8 @@ bool TableManager::removeTableMeta(const std::string& table_name) {
 }
 
 bool TableManager::saveColumnMeta(const ColumnMeta& meta) {
-    // 直接操作 pg_attribute 而不调用 insertTuple 以避免死锁
-    Tuple tuple(&pg_attribute_meta_->schema);
+    // 直接操作 tn_attribute 而不调用 insertTuple 以避免死锁
+    Tuple tuple(&tn_attribute_meta_->schema);
 
     tuple.addField(Field(static_cast<int32_t>(meta.table_id)));
     tuple.addField(Field(meta.column_name, DataType::VARCHAR));
@@ -754,7 +754,7 @@ bool TableManager::saveColumnMeta(const ColumnMeta& meta) {
     }
 
     // 查找或创建数据页
-    PageId page_id = pg_attribute_meta_->last_page_id;
+    PageId page_id = tn_attribute_meta_->last_page_id;
     BufferFrame* frame = buffer_pool_->fetchPage(page_id);
 
     if (!frame) {
@@ -781,8 +781,8 @@ bool TableManager::saveColumnMeta(const ColumnMeta& meta) {
             buffer_pool_->unpinPage(page_id, true);
         }
 
-        pg_attribute_meta_->last_page_id = new_page_id;
-        pg_attribute_meta_->page_count++;
+        tn_attribute_meta_->last_page_id = new_page_id;
+        tn_attribute_meta_->page_count++;
         page_id = new_page_id;
     }
 
@@ -794,15 +794,15 @@ bool TableManager::saveColumnMeta(const ColumnMeta& meta) {
 
     buffer_pool_->unpinPage(page_id, true);
 
-    pg_attribute_meta_->tuple_count++;
+    tn_attribute_meta_->tuple_count++;
 
     LOG_DEBUG("Saved column meta at (" << page_id << ", " << slot_id << ")");
     return true;
 }
 
 bool TableManager::removeColumnMeta(uint32_t table_id) {
-    // 直接遍历 pg_attribute 找到并删除对应记录，不调用 makeIterator/deleteTuple 以避免死锁
-    PageId page_id = pg_attribute_meta_->first_page_id;
+    // 直接遍历 tn_attribute 找到并删除对应记录，不调用 makeIterator/deleteTuple 以避免死锁
+    PageId page_id = tn_attribute_meta_->first_page_id;
 
     while (page_id != INVALID_PAGE_ID) {
         BufferFrame* frame = buffer_pool_->fetchPage(page_id);
@@ -820,7 +820,7 @@ bool TableManager::removeColumnMeta(uint32_t table_id) {
 
             if (tuple_data && tuple_len > 0) {
                 // 反序列化元组获取 table_id（第1个字段，索引0）
-                Tuple tuple(&pg_attribute_meta_->schema);
+                Tuple tuple(&tn_attribute_meta_->schema);
                 if (tuple.deserialize(reinterpret_cast<const uint8_t*>(tuple_data), tuple_len)) {
                     if (tuple.getFieldCount() >= 1) {
                         int32_t tid = tuple.getField(0).getInt32();
@@ -828,7 +828,7 @@ bool TableManager::removeColumnMeta(uint32_t table_id) {
                             // 删除此元组
                             page.deleteTuple(static_cast<uint16_t>(slot_id));
                             page_modified = true;
-                            pg_attribute_meta_->tuple_count--;
+                            tn_attribute_meta_->tuple_count--;
                         }
                     }
                 }
@@ -845,7 +845,7 @@ bool TableManager::removeColumnMeta(uint32_t table_id) {
 
 std::vector<ColumnMeta> TableManager::loadColumnMeta(uint32_t table_id) {
     std::vector<ColumnMeta> columns;
-    TableIterator iter = makeIterator("pg_attribute");
+    TableIterator iter = makeIterator("tn_attribute");
 
     while (iter.hasNext()) {
         Tuple tuple = iter.getNext();
@@ -891,7 +891,7 @@ bool TableManager::addColumn(const std::string& table_name, const ColumnDef& col
     // 添加列到schema
     table_meta->schema.addColumn(column_def.name, column_def.type, column_def.length);
 
-    // 保存列元数据到pg_attribute
+    // 保存列元数据到tn_attribute
     ColumnMeta col_meta;
     col_meta.table_id = table_meta->table_id;
     col_meta.column_name = column_def.name;
@@ -944,7 +944,7 @@ bool TableManager::dropColumn(const std::string& table_name, const std::string& 
     table_meta->schema.removeColumn(column_name);
 
     // 重新编号剩余的列
-    // 删除pg_attribute中的列元数据并重新保存
+    // 删除tn_attribute中的列元数据并重新保存
     if (!removeColumnMeta(table_meta->table_id)) {
         LOG_ERROR("Failed to remove column metadata");
         return false;
@@ -1004,7 +1004,7 @@ bool TableManager::modifyColumn(const std::string& table_name, const std::string
     // 获取原列的属性
     const auto& old_col = table_meta->schema.getColumn(col_idx);
 
-    // 删除旧的列元数据从 pg_attribute
+    // 删除旧的列元数据从 tn_attribute
     if (!removeColumnMeta(table_meta->table_id)) {
         LOG_ERROR("Failed to remove old column metadata");
         return false;
@@ -1036,7 +1036,7 @@ bool TableManager::modifyColumn(const std::string& table_name, const std::string
     }
     table_meta->schema = std::move(new_schema);
 
-    // 重新保存所有列的元数据到 pg_attribute
+    // 重新保存所有列的元数据到 tn_attribute
     for (size_t i = 0; i < table_meta->schema.getColumnCount(); ++i) {
         const auto& col = table_meta->schema.getColumn(i);
         ColumnMeta col_meta;
@@ -1085,7 +1085,7 @@ bool TableManager::renameTable(const std::string& old_name, const std::string& n
     // 更新表元数据中的表名
     table_meta->table_name = new_name;
 
-    // 更新系统表 pg_class 中的表名
+    // 更新系统表 tn_class 中的表名
     // 首先删除旧的记录
     if (!removeTableMeta(old_name)) {
         LOG_ERROR("Failed to remove old table metadata");

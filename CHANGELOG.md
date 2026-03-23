@@ -37,12 +37,12 @@ All notable changes to TinyDB will be documented in this file.
   - Lock upgrade support
 
 - **Monitoring and Diagnostics**
-  - pg_stat_activity view
-  - pg_stat_database view
-  - pg_stat_user_tables view
-  - pg_stat_user_indexes view
-  - pg_locks view
-  - pg_stat_replication view
+  - tn_stat_activity view
+  - tn_stat_database view
+  - tn_stat_user_tables view
+  - tn_stat_user_indexes view
+  - tn_locks view
+  - tn_stat_replication view
   - Table/index statistics
   - Buffer statistics
   - WAL statistics
@@ -64,12 +64,12 @@ All notable changes to TinyDB will be documented in this file.
   - Bulk import
 
 - **System Views**
-  - pg_tables view
-  - pg_indexes view
-  - pg_user view
-  - pg_database view
-  - pg_backup_list view
-  - pg_restore_points view
+  - tn_tables view
+  - tn_indexes view
+  - tn_user view
+  - tn_database view
+  - tn_backup_list view
+  - tn_restore_points view
 
 ## [0.4.0] - 2024-03-19
 
@@ -106,7 +106,7 @@ All notable changes to TinyDB will be documented in this file.
 - Heap table storage
 - Buffer pool with LRU replacement
 - WAL (Write-Ahead Logging)
-- System tables (pg_class, pg_attribute)
+- System tables (tn_class, tn_attribute)
 - DDL support (CREATE TABLE, DROP TABLE)
 
 ## [0.1.0] - 2024-03-16

@@ -76,11 +76,11 @@ target_link_libraries(engine
 )
 
 # 服务端可执行文件
-add_executable(dbserver
+add_executable(tinydb-server
     server/main.cpp
 )
 
-target_link_libraries(dbserver
+target_link_libraries(tinydb-server
     engine
     network
     sql
@@ -88,6 +88,6 @@ target_link_libraries(dbserver
     common
 )
 
-set_target_properties(dbserver PROPERTIES
+set_target_properties(tinydb-server PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )

@@ -179,16 +179,16 @@ TEST_F(Phase5IntegrationTest, SystemViewManagerBasic) {
     sys_view_mgr.initialize(&diag_mgr, nullptr, nullptr);
 
     // 测试系统视图检测
-    EXPECT_TRUE(sys_view_mgr.isSystemViewQuery("pg_stat_activity"));
-    EXPECT_TRUE(sys_view_mgr.isSystemViewQuery("pg_tables"));
-    EXPECT_TRUE(sys_view_mgr.isSystemViewQuery("pg_user"));
+    EXPECT_TRUE(sys_view_mgr.isSystemViewQuery("tn_stat_activity"));
+    EXPECT_TRUE(sys_view_mgr.isSystemViewQuery("tn_tables"));
+    EXPECT_TRUE(sys_view_mgr.isSystemViewQuery("tn_user"));
     EXPECT_FALSE(sys_view_mgr.isSystemViewQuery("regular_table"));
 
     // 测试获取视图定义
     engine::SystemView view_def;
-    EXPECT_TRUE(sys_view_mgr.getViewDefinition("pg_stat_activity", view_def));
-    EXPECT_EQ(view_def.name, "pg_stat_activity");
-    EXPECT_EQ(view_def.schema, "pg_catalog");
+    EXPECT_TRUE(sys_view_mgr.getViewDefinition("tn_stat_activity", view_def));
+    EXPECT_EQ(view_def.name, "tn_stat_activity");
+    EXPECT_EQ(view_def.schema, "tn_catalog");
     EXPECT_FALSE(view_def.columns.empty());
 
     // 测试列出所有视图
@@ -196,10 +196,10 @@ TEST_F(Phase5IntegrationTest, SystemViewManagerBasic) {
     EXPECT_GE(views.size(), 5);  // 至少应该有几个核心视图
 
     // 测试查询系统视图
-    auto result = sys_view_mgr.querySystemView("pg_user");
+    auto result = sys_view_mgr.querySystemView("tn_user");
     EXPECT_TRUE(result.success);
     EXPECT_FALSE(result.column_names.empty());
-    EXPECT_FALSE(result.rows.empty());  // pg_user应该有默认用户
+    EXPECT_FALSE(result.rows.empty());  // tn_user应该有默认用户
 }
 
 // ========== End-to-End Integration Test ==========
@@ -228,7 +228,7 @@ TEST_F(Phase5IntegrationTest, EndToEndEnterpriseFeatures) {
     diag_mgr.recordInsert("orders");
 
     // 3. 查询系统视图验证统计
-    auto table_stats = sys_view_mgr.querySystemView("pg_stat_user_tables");
+    auto table_stats = sys_view_mgr.querySystemView("tn_stat_user_tables");
     EXPECT_TRUE(table_stats.success);
 
     // 4. 导出数据（模拟）

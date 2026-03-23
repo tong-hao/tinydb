@@ -33,6 +33,6 @@ else()
 endif()
 
 # 安装目标
-install(TARGETS dbserver dbclient
+install(TARGETS tinydb-server tinydb-cli
     RUNTIME DESTINATION bin
 )

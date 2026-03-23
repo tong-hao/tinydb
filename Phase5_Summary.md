@@ -69,18 +69,18 @@
 ### 6. 系统视图 (system_view_manager.h/cpp)
 **文件**: `src/engine/system_view_manager.h`, `src/engine/system_view_manager.cpp`
 
-- **pg_stat_activity**: 当前会话活动
-- **pg_stat_database**: 数据库级统计
-- **pg_stat_user_tables**: 用户表统计
-- **pg_stat_user_indexes**: 用户索引统计
-- **pg_locks**: 锁信息
-- **pg_stat_replication**: 复制统计
-- **pg_tables**: 表列表
-- **pg_indexes**: 索引列表
-- **pg_user**: 用户列表
-- **pg_database**: 数据库列表
-- **pg_backup_list**: 备份列表
-- **pg_restore_points**: 恢复点列表
+- **tn_stat_activity**: 当前会话活动
+- **tn_stat_database**: 数据库级统计
+- **tn_stat_user_tables**: 用户表统计
+- **tn_stat_user_indexes**: 用户索引统计
+- **tn_locks**: 锁信息
+- **tn_stat_replication**: 复制统计
+- **tn_tables**: 表列表
+- **tn_indexes**: 索引列表
+- **tn_user**: 用户列表
+- **tn_database**: 数据库列表
+- **tn_backup_list**: 备份列表
+- **tn_restore_points**: 恢复点列表
 
 **单元测试**: `tests/unit/test_phase5_integration.cpp`
 
@@ -140,31 +140,31 @@ GRANT readonly TO app_user;
 ### 备份恢复
 ```sql
 -- 创建恢复点
-SELECT pg_create_restore_point('before_migration');
+SELECT tn_create_restore_point('before_migration');
 
 -- 查看备份列表
-SELECT * FROM pg_backup_list;
+SELECT * FROM tn_backup_list;
 
 -- 查看恢复点
-SELECT * FROM pg_restore_points;
+SELECT * FROM tn_restore_points;
 ```
 
 ### 系统视图查询
 ```sql
 -- 查看当前活动
-SELECT * FROM pg_stat_activity;
+SELECT * FROM tn_stat_activity;
 
 -- 查看表统计
-SELECT * FROM pg_stat_user_tables;
+SELECT * FROM tn_stat_user_tables;
 
 -- 查看索引使用
-SELECT * FROM pg_stat_user_indexes;
+SELECT * FROM tn_stat_user_indexes;
 
 -- 查看锁等待
-SELECT * FROM pg_locks WHERE NOT granted;
+SELECT * FROM tn_locks WHERE NOT granted;
 
 -- 查看复制状态
-SELECT * FROM pg_stat_replication;
+SELECT * FROM tn_stat_replication;
 ```
 
 ### 命令行客户端
@@ -239,7 +239,7 @@ SELECT * FROM pg_stat_replication;
 1. **权限模型**: 基于 PostgreSQL 的权限系统，支持角色继承
 2. **备份策略**: 物理备份 + WAL 归档，支持 PITR
 3. **复制协议**: 自定义 TCP 协议传输 WAL
-4. **系统视图**: 兼容 PostgreSQL 的 pg_stat_* 视图
+4. **系统视图**: 兼容 PostgreSQL 的 tn_stat_* 视图
 5. **客户端设计**: psql-like 交互体验
 
 ## 待完善的功能

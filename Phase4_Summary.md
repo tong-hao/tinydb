@@ -27,7 +27,7 @@
 - 获取表的所有索引
 - 获取列的索引
 - 索引条目的插入和删除（与DML操作集成）
-- pg_index系统表支持
+- tn_index系统表支持
 
 **单元测试**: `tests/unit/test_index_ddl.cpp` (11个测试用例)
 
