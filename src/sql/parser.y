@@ -684,9 +684,8 @@ analyze_stmt:
 
 /* EXPLAIN 语句 */
 explain_stmt:
-    EXPLAIN statement {
-        $$ = new ExplainStmt();
-        // Note: inner statement is stored but not used in this simplified version
+    EXPLAIN select_stmt {
+        $$ = new ExplainStmt(std::unique_ptr<Statement>($2));
     }
     ;
 

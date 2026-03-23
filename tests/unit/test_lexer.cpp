@@ -227,6 +227,14 @@ TEST_F(LexerTest, ParseExplain) {
 
     auto explain_stmt = dynamic_cast<ExplainStmt*>(ast->statement());
     ASSERT_NE(explain_stmt, nullptr);
+
+    // Verify inner statement is properly set
+    auto inner_stmt = explain_stmt->innerStatement();
+    ASSERT_NE(inner_stmt, nullptr);
+
+    auto select_stmt = dynamic_cast<SelectStmt*>(inner_stmt);
+    ASSERT_NE(select_stmt, nullptr);
+    EXPECT_EQ(select_stmt->fromTable(), "users");
 }
 
 // CREATE VIEW 测试
