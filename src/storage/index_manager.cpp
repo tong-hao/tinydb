@@ -99,6 +99,7 @@ std::vector<std::shared_ptr<BTreeIndex>> IndexManager::getTableIndexes(const std
     std::vector<std::shared_ptr<BTreeIndex>> result;
 
     for (const auto& [name, index] : indexes_) {
+        if (!index) continue;
         if (index->getMeta().table_name == table_name) {
             result.push_back(index);
         }
@@ -112,6 +113,7 @@ std::shared_ptr<BTreeIndex> IndexManager::getColumnIndex(const std::string& tabl
     std::lock_guard<std::mutex> lock(mutex_);
 
     for (const auto& [name, index] : indexes_) {
+        if (!index) continue;
         const auto& meta = index->getMeta();
         if (meta.table_name == table_name && meta.column_name == column_name) {
             return index;
@@ -130,8 +132,10 @@ std::vector<std::string> IndexManager::getAllIndexNames() {
     std::lock_guard<std::mutex> lock(mutex_);
     std::vector<std::string> result;
 
-    for (const auto& [name, _] : indexes_) {
-        result.push_back(name);
+    for (const auto& [name, index] : indexes_) {
+        if (index) {
+            result.push_back(name);
+        }
     }
 
     return result;
@@ -142,6 +146,7 @@ std::vector<std::string> IndexManager::getIndexNamesForTable(const std::string& 
     std::vector<std::string> result;
 
     for (const auto& [name, index] : indexes_) {
+        if (!index) continue;
         if (index->getMeta().table_name == table_name) {
             result.push_back(name);
         }

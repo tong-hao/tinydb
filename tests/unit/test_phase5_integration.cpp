@@ -176,7 +176,7 @@ TEST_F(Phase5IntegrationTest, SystemViewManagerBasic) {
     engine::SystemViewManager sys_view_mgr;
     DiagnosticsManager diag_mgr;
 
-    sys_view_mgr.initialize(&diag_mgr, nullptr, nullptr);
+    sys_view_mgr.initialize(nullptr, &diag_mgr, nullptr, nullptr);
 
     // 测试系统视图检测
     EXPECT_TRUE(sys_view_mgr.isSystemViewQuery("tn_stat_activity"));
@@ -211,7 +211,7 @@ TEST_F(Phase5IntegrationTest, EndToEndEnterpriseFeatures) {
     ImportExportManager ie_mgr;
     engine::SystemViewManager sys_view_mgr;
 
-    sys_view_mgr.initialize(&diag_mgr, &ie_mgr, nullptr);
+    sys_view_mgr.initialize(nullptr, &diag_mgr, &ie_mgr, nullptr);
 
     // 1. 创建用户并授予权限
     EXPECT_TRUE(perm_mgr.createUser("app_user", "app_pass", false));

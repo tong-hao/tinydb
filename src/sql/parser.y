@@ -56,12 +56,20 @@ extern AST* g_ast;
     DropIndexStmt* drop_index_stmt;
     AnalyzeStmt* analyze_stmt;
     ExplainStmt* explain_stmt;
+    CreateViewStmt* create_view_stmt;
+    DropViewStmt* drop_view_stmt;
 
     // 列表类型
     std::vector<std::unique_ptr<Expression>>* expr_list;
     std::vector<std::string>* str_list;
     std::vector<std::pair<std::string, std::string>>* col_def_list;
     std::vector<std::pair<std::string, std::unique_ptr<Expression>>>* assignment_list;
+
+    // ORDER BY support
+    int bool_val;
+    std::pair<Expression*, bool>* order_by_item;
+    std::vector<std::pair<std::unique_ptr<Expression>, bool>>* order_by_list;
+    std::pair<int64_t, int64_t>* limit_offset;
 }
 
 %define parse.error verbose
@@ -69,7 +77,7 @@ extern AST* g_ast;
 /* 关键字 */
 %token SELECT INSERT UPDATE DELETE
 %token FROM WHERE INTO VALUES SET
-%token CREATE DROP TABLE INDEX ON
+%token CREATE DROP TABLE VIEW INDEX ON
 %token AND OR NOT NULLX TRUE FALSE
 %token PRIMARY KEY UNIQUE FOREIGN REFERENCES
 %token AS DISTINCT ALL STAR
@@ -114,6 +122,8 @@ extern AST* g_ast;
 %type <drop_index_stmt> drop_index_stmt
 %type <analyze_stmt> analyze_stmt
 %type <explain_stmt> explain_stmt
+%type <create_view_stmt> create_view_stmt
+%type <drop_view_stmt> drop_view_stmt
 
 %type <expr> expr select_item opt_where
 %type <expr> comparison_expr logical_expr
@@ -123,8 +133,17 @@ extern AST* g_ast;
 %type <assignment_list> assignment_list
 
 %type <str> table_name column_name data_type
+%type <bool_val> opt_asc_desc
+%type <order_by_item> order_by_item
+%type <order_by_list> opt_order_by order_by_list
+%type <limit_offset> opt_limit
+%type <expr_list> opt_group_by
 
 %destructor { free($$); } <str>
+%destructor { delete $$; } <col_def_list>
+%destructor { delete $$; } <order_by_list>
+%destructor { delete $$; } <order_by_item>
+%destructor { delete $$; } <limit_offset>
 
 %start statement
 
@@ -184,6 +203,22 @@ statement:
         if (g_ast) g_ast->setStatement(std::unique_ptr<Statement>($$));
     }
     | explain_stmt SEMICOLON {
+        $$ = $1;
+        if (g_ast) g_ast->setStatement(std::unique_ptr<Statement>($$));
+    }
+    | create_view_stmt SEMICOLON {
+        $$ = $1;
+        if (g_ast) g_ast->setStatement(std::unique_ptr<Statement>($$));
+    }
+    | create_view_stmt {
+        $$ = $1;
+        if (g_ast) g_ast->setStatement(std::unique_ptr<Statement>($$));
+    }
+    | drop_view_stmt SEMICOLON {
+        $$ = $1;
+        if (g_ast) g_ast->setStatement(std::unique_ptr<Statement>($$));
+    }
+    | drop_view_stmt {
         $$ = $1;
         if (g_ast) g_ast->setStatement(std::unique_ptr<Statement>($$));
     }
@@ -247,7 +282,7 @@ statement:
 
 /* SELECT 语句 */
 select_stmt:
-    SELECT select_list FROM table_name opt_where {
+    SELECT select_list FROM table_name opt_where opt_group_by opt_order_by opt_limit {
         $$ = new SelectStmt();
         $$->setFromTable($4);
         free($4);
@@ -260,14 +295,62 @@ select_stmt:
         if ($5) {
             $$->setWhereCondition(std::unique_ptr<Expression>($5));
         }
+        if ($6) {
+            // GROUP BY
+            for (auto& expr : *$6) {
+                $$->addGroupByItem(std::move(expr));
+            }
+            delete $6;
+        }
+        // ORDER BY
+        if ($7) {
+            for (auto& item : *$7) {
+                $$->addOrderBy(std::move(item.first), item.second);
+            }
+            delete $7;
+        }
+        // LIMIT and OFFSET
+        if ($8) {
+            if ($8->first >= 0) {
+                $$->setLimit($8->first);
+            }
+            if ($8->second >= 0) {
+                $$->setOffset($8->second);
+            }
+            delete $8;
+        }
     }
-    | SELECT STAR FROM table_name opt_where {
+    | SELECT STAR FROM table_name opt_where opt_group_by opt_order_by opt_limit {
         $$ = new SelectStmt();
         $$->addSelectItem(std::make_unique<ColumnRefExpr>("*"));
         $$->setFromTable($4);
         free($4);
         if ($5) {
             $$->setWhereCondition(std::unique_ptr<Expression>($5));
+        }
+        if ($6) {
+            // GROUP BY
+            for (auto& expr : *$6) {
+                $$->addGroupByItem(std::move(expr));
+            }
+            delete $6;
+        }
+        // ORDER BY
+        if ($7) {
+            for (auto& item : *$7) {
+                $$->addOrderBy(std::move(item.first), item.second);
+            }
+            delete $7;
+        }
+        // LIMIT and OFFSET
+        if ($8) {
+            if ($8->first >= 0) {
+                $$->setLimit($8->first);
+            }
+            if ($8->second >= 0) {
+                $$->setOffset($8->second);
+            }
+            delete $8;
         }
     }
     ;
@@ -569,6 +652,28 @@ drop_index_stmt:
     }
     ;
 
+/* CREATE VIEW 语句 */
+create_view_stmt:
+    CREATE VIEW table_name AS select_stmt {
+        $$ = new CreateViewStmt();
+        $$->setViewName($3);
+        free($3);
+        $$->setSelectStmt(std::unique_ptr<SelectStmt>($5));
+    }
+    ;
+
+/* DROP VIEW 语句 */
+drop_view_stmt:
+    DROP VIEW table_name {
+        $$ = new DropViewStmt($3);
+        free($3);
+    }
+    | DROP VIEW IF EXISTS table_name {
+        $$ = new DropViewStmt($5, true);
+        free($5);
+    }
+    ;
+
 /* ANALYZE 语句 */
 analyze_stmt:
     ANALYZE table_name {
@@ -589,6 +694,67 @@ explain_stmt:
 opt_where:
     /* empty */ { $$ = nullptr; }
     | WHERE expr { $$ = $2; }
+    ;
+
+/* GROUP BY 子句 */
+opt_group_by:
+    /* empty */ { $$ = nullptr; }
+    | GROUP BY value_list { $$ = $3; }
+    ;
+
+/* ORDER BY 子句 */
+opt_order_by:
+    /* empty */ { $$ = nullptr; }
+    | ORDER BY order_by_list { $$ = $3; }
+    ;
+
+order_by_list:
+    order_by_item {
+        $$ = new std::vector<std::pair<std::unique_ptr<Expression>, bool>>();
+        $$->push_back({std::unique_ptr<Expression>($1->first), $1->second});
+        delete $1;
+    }
+    | order_by_list COMMA order_by_item {
+        $$ = $1;
+        $$->push_back({std::unique_ptr<Expression>($3->first), $3->second});
+        delete $3;
+    }
+    ;
+
+order_by_item:
+    expr opt_asc_desc {
+        $$ = new std::pair<Expression*, bool>($1, $2);
+    }
+    ;
+
+opt_asc_desc:
+    /* empty */ { $$ = true; }
+    | ASC { $$ = true; }
+    | DESC { $$ = false; }
+    ;
+
+/* LIMIT 子句 - returns pair of (limit, offset), -1 means not set */
+opt_limit:
+    /* empty */ {
+        $$ = new std::pair<int64_t, int64_t>(-1, -1);
+    }
+    | LIMIT NUMBER {
+        int64_t limit_val = ($2 != nullptr) ? atoll($2) : 0;
+        $$ = new std::pair<int64_t, int64_t>(limit_val, -1);
+        free($2);
+    }
+    | LIMIT NUMBER OFFSET NUMBER {
+        int64_t limit_val = ($2 != nullptr) ? atoll($2) : 0;
+        int64_t offset_val = ($4 != nullptr) ? atoll($4) : 0;
+        $$ = new std::pair<int64_t, int64_t>(limit_val, offset_val);
+        free($2);
+        free($4);
+    }
+    | OFFSET NUMBER {
+        int64_t offset_val = ($2 != nullptr) ? atoll($2) : 0;
+        $$ = new std::pair<int64_t, int64_t>(-1, offset_val);
+        free($2);
+    }
     ;
 
 /* 表达式 */

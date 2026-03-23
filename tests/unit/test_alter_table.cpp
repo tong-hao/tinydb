@@ -348,8 +348,13 @@ TEST_F(AlterTableTest, ParseAlterTableAllVariants) {
         "ALTER TABLE users DROP COLUMN age",
         "ALTER TABLE users MODIFY age BIGINT",
         "ALTER TABLE users MODIFY COLUMN age BIGINT",
+        "ALTER TABLE users ALTER name VARCHAR(150)",
+        "ALTER TABLE users ALTER COLUMN name VARCHAR(150)",
+        "ALTER TABLE users ALTER name TYPE VARCHAR(150)",
+        "ALTER TABLE users ALTER COLUMN name TYPE VARCHAR(150)",
         "ALTER TABLE users RENAME TO customers",
         "ALTER TABLE users RENAME customers",
+        "ALTER TABLE users RENAME COLUMN age TO user_age",
     };
 
     for (const auto& sql : statements) {
@@ -369,7 +374,61 @@ TEST_F(AlterTableTest, AlterEmptyTable) {
     EXPECT_TRUE(result.success());
 }
 
-// ========== 索引列修改测试 ==========
+TEST_F(AlterTableTest, RenameColumn) {
+    // 先添加列
+    auto result = executor_->execute("ALTER TABLE users ADD age INT");
+    EXPECT_TRUE(result.success());
+
+    // 重命名列
+    result = executor_->execute("ALTER TABLE users RENAME COLUMN age TO user_age");
+    EXPECT_TRUE(result.success());
+
+    // 验证旧列名不存在（通过INSERT测试）
+    result = executor_->execute("INSERT INTO users (id, name, user_age) VALUES (3, 'Charlie', 25)");
+    EXPECT_TRUE(result.success());
+}
+
+TEST_F(AlterTableTest, RenameNonExistentColumn) {
+    auto result = executor_->execute("ALTER TABLE users RENAME COLUMN nonexistent TO newname");
+    EXPECT_FALSE(result.success());
+}
+
+TEST_F(AlterTableTest, RenameColumnToExistingName) {
+    // 添加列
+    auto result = executor_->execute("ALTER TABLE users ADD age INT");
+    EXPECT_TRUE(result.success());
+
+    // 尝试重命名为已存在的列名
+    result = executor_->execute("ALTER TABLE users RENAME COLUMN age TO name");
+    EXPECT_FALSE(result.success());
+}
+
+// ========== ALTER COLUMN TYPE 测试 (PostgreSQL语法) ==========
+TEST_F(AlterTableTest, AlterColumnType) {
+    // 添加列
+    auto result = executor_->execute("ALTER TABLE users ADD age INT");
+    EXPECT_TRUE(result.success());
+
+    // 修改列类型
+    result = executor_->execute("ALTER TABLE users ALTER COLUMN age TYPE BIGINT");
+    EXPECT_TRUE(result.success());
+}
+
+TEST_F(AlterTableTest, AlterColumnTypeWithoutKeywordColumn) {
+    // 添加列
+    auto result = executor_->execute("ALTER TABLE users ADD age INT");
+    EXPECT_TRUE(result.success());
+
+    // 修改列类型 (不使用 COLUMN 关键字)
+    result = executor_->execute("ALTER TABLE users ALTER age TYPE VARCHAR(50)");
+    EXPECT_TRUE(result.success());
+}
+
+TEST_F(AlterTableTest, AlterColumnTypeNonExistentColumn) {
+    auto result = executor_->execute("ALTER TABLE users ALTER COLUMN nonexistent TYPE INT");
+    EXPECT_FALSE(result.success());
+}
+
 TEST_F(AlterTableTest, AlterTableWithIndex) {
     // 创建索引
     auto result = executor_->execute("CREATE INDEX idx_name ON users (name)");

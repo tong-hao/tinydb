@@ -81,7 +81,7 @@ struct JoinPlanNode : public PlanNode {
 
 // 过滤计划节点
 struct FilterPlanNode : public PlanNode {
-    std::unique_ptr<sql::Expression> condition;
+    const sql::Expression* condition = nullptr;  // Raw pointer - doesn't own
     double selectivity = 1.0;
 
     FilterPlanNode() : PlanNode(PlanNodeType::FILTER) {}
@@ -154,7 +154,7 @@ public:
     std::shared_ptr<PlanNode> createJoinNode(JoinNode&& join,
                                               std::shared_ptr<PlanNode> left,
                                               std::shared_ptr<PlanNode> right);
-    std::shared_ptr<PlanNode> createFilterNode(std::unique_ptr<sql::Expression> condition,
+    std::shared_ptr<PlanNode> createFilterNode(const sql::Expression* condition,
                                                double selectivity);
     std::shared_ptr<PlanNode> createProjectNode(std::vector<std::unique_ptr<sql::Expression>> projections);
 
@@ -177,8 +177,8 @@ private:
     void extractColumnReferences(const sql::Expression* expr,
                                  std::vector<std::string>& columns);
 
-    // 分解AND条件
-    std::vector<std::unique_ptr<sql::Expression>> decomposeAndConditions(
+    // 分解AND条件 - returns raw pointers, no ownership transfer
+    std::vector<const sql::Expression*> decomposeAndConditions(
         const sql::Expression* condition);
 
     // 获取列的条件

@@ -2,11 +2,13 @@
 #include "network/connection.h"
 #include "network/protocol.h"
 #include "engine/executor.h"
+#include "engine/system_view_manager.h"
 #include "storage/storage_engine.h"
 #include "common/logger.h"
 #include <iostream>
 #include <cstring>
 #include <csignal>
+#include <filesystem>
 
 using namespace tinydb;
 using namespace tinydb::network;
@@ -16,6 +18,7 @@ using namespace tinydb::storage;
 // 全局实例，用于信号处理
 Server* g_server = nullptr;
 StorageEngine* g_storage = nullptr;
+std::unique_ptr<engine::SystemViewManager> g_system_view_manager_ptr;
 
 // 信号处理函数
 void signalHandler(int sig) {
@@ -119,14 +122,22 @@ int main(int argc, char* argv[]) {
         Logger::instance().setLevel(LogLevel::DEBUG);
     }
 
+    // 自动创建数据目录
+    std::filesystem::path data_path(data_dir);
+    if (!std::filesystem::exists(data_path)) {
+        std::filesystem::create_directories(data_path);
+    }
+    // 获取绝对路径
+    std::string abs_data_dir = std::filesystem::absolute(data_path).string();
+
     LOG_INFO("TinyDB Server starting...");
     LOG_INFO("Port: " << port);
-    LOG_INFO("Data directory: " << data_dir);
+    LOG_INFO("Data directory: " << abs_data_dir);
 
     // 初始化存储引擎
     StorageConfig storage_config;
-    storage_config.db_file_path = data_dir + "/tinydb.db";
-    storage_config.wal_file_path = data_dir + "/tinydb.wal";
+    storage_config.db_file_path = abs_data_dir + "/tinydb.db";
+    storage_config.wal_file_path = abs_data_dir + "/tinydb.wal";
     storage_config.buffer_pool_size = 1024;
 
     StorageEngine storage(storage_config);
@@ -139,6 +150,12 @@ int main(int argc, char* argv[]) {
     LOG_INFO("Storage engine initialized");
     LOG_INFO("Database file: " << storage_config.db_file_path);
     LOG_INFO("WAL file: " << storage_config.wal_file_path);
+
+    // 初始化系统视图管理器
+    g_system_view_manager_ptr = std::make_unique<engine::SystemViewManager>();
+    g_system_view_manager_ptr->initialize(&storage, nullptr, nullptr, nullptr);
+    engine::g_system_view_manager = g_system_view_manager_ptr.get();
+    LOG_INFO("System view manager initialized");
 
     // 设置信号处理
     std::signal(SIGINT, signalHandler);

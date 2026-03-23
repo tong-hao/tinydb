@@ -405,14 +405,37 @@ InternalEntry BTreePage::split(BTreePage& new_page) {
         header().key_count = mid;
     } else {
         // 注意：new_page 已经在调用者处初始化，不需要再次 init
-        for (int i = mid + 1; i < header().key_count; ++i) {
-            IndexKey key = getKeyAt(i);
-            PageId child = getChildAt(i + 1);
-            new_page.insertInternalEntry(i - mid - 1, InternalEntry(key, child));
-        }
+        // 内部节点分裂：键mid被提升到父节点，键mid+1及之后移到新节点
+        // 对于内部节点，有key_count+1个子节点
+        // 新节点的第一个子节点是原节点的第mid+1个子节点
         PageId first_child = getChildAt(mid + 1);
+
+        // 手动设置新节点的第一个子节点
+        // 注意：new_page是全新的空节点，key_count=0
+        // 我们需要模拟insertInternalEntry的行为，但手动控制写入
         new_page.header().free_space = sizeof(BTreePageHeader);
         memcpy(new_page.getEntryData(), &first_child, sizeof(PageId));
+
+        // 从mid+1开始复制键值对
+        // 对于每个键i，其对应的右子节点是i+1
+        // 第一个键（mid+1）的右子节点是mid+2，这个应该作为第二个子节点
+        for (int i = mid + 1; i < header().key_count; ++i) {
+            IndexKey key = getKeyAt(i);
+            PageId right_child = getChildAt(i + 1);
+
+            // 手动构建entry并追加到free_space位置
+            auto key_data = key.serialize();
+            uint32_t key_size = key_data.size();
+            size_t entry_size = sizeof(key_size) + key_size + sizeof(PageId);
+
+            char* ptr = new_page.getEntryData() + new_page.header().free_space;
+            memcpy(ptr, &key_size, sizeof(key_size));
+            memcpy(ptr + sizeof(key_size), key_data.data(), key_size);
+            memcpy(ptr + sizeof(key_size) + key_size, &right_child, sizeof(PageId));
+
+            new_page.header().key_count++;
+            new_page.header().free_space += entry_size;
+        }
         header().key_count = mid;
     }
 
@@ -715,6 +738,7 @@ void BTreeIndex::splitRoot(const IndexKey& split_key, PageId split_page_id) {
     new_root.init(new_root_id, BTreePageType::INTERNAL_NODE);
     new_root.setRoot(true);
 
+    // Mark old root as no longer root
     BufferFrame* old_root_frame = buffer_pool_->fetchPage(meta_.root_page_id);
     if (old_root_frame) {
         Page& old_root_page = old_root_frame->getPage();
@@ -723,9 +747,25 @@ void BTreeIndex::splitRoot(const IndexKey& split_key, PageId split_page_id) {
         buffer_pool_->unpinPage(meta_.root_page_id, true);
     }
 
-    new_root.header().free_space = sizeof(BTreePageHeader);
-    memcpy(new_root.getEntryData(), &meta_.root_page_id, sizeof(PageId));
-    new_root.insertInternalEntry(0, InternalEntry(split_key, split_page_id));
+    // Build the new root manually:
+    // [old_root_page_id][key_size][split_key][split_page_id]
+    char* ptr = new_root.getEntryData();
+
+    // First child: old root
+    memcpy(ptr, &meta_.root_page_id, sizeof(PageId));
+    ptr += sizeof(PageId);
+
+    // First key: split_key, followed by second child: split_page_id
+    auto key_data = split_key.serialize();
+    uint32_t key_size = key_data.size();
+    memcpy(ptr, &key_size, sizeof(key_size));
+    memcpy(ptr + sizeof(key_size), key_data.data(), key_size);
+    memcpy(ptr + sizeof(key_size) + key_size, &split_page_id, sizeof(PageId));
+
+    // Update header
+    new_root.header().key_count = 1;
+    new_root.header().free_space = sizeof(BTreePageHeader) + sizeof(PageId) + sizeof(key_size) + key_size + sizeof(PageId);
+    new_root.header().flags |= BTreePageHeader::FLAG_DIRTY;
 
     meta_.root_page_id = new_root_id;
     buffer_pool_->unpinPage(new_root_id, true);
@@ -798,9 +838,22 @@ std::vector<TID> BTreeIndex::lookup(const IndexKey& key) {
     Page& page = frame->getPage();
     BTreePage btree_page(&page);
 
+    // 找到键的位置
     int index = btree_page.findKey(key);
     if (index >= 0) {
-        result.push_back(btree_page.getTIDAt(index));
+        // 收集所有匹配的键（处理重复键）
+        // 先向前扫描
+        int i = index;
+        while (i >= 0 && btree_page.getKeyAt(i) == key) {
+            result.push_back(btree_page.getTIDAt(i));
+            i--;
+        }
+        // 再向后扫描
+        i = index + 1;
+        while (i < btree_page.getKeyCount() && btree_page.getKeyAt(i) == key) {
+            result.push_back(btree_page.getTIDAt(i));
+            i++;
+        }
     }
 
     buffer_pool_->unpinPage(leaf_id, false);

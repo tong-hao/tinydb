@@ -77,6 +77,9 @@ public:
     // 删除列
     bool removeColumn(const std::string& name);
 
+    // 修改列名
+    bool renameColumn(const std::string& old_name, const std::string& new_name);
+
     // 计算行的最大存储大小（所有列都非空且为最大长度）
     size_t getRowMaxSize() const;
 

@@ -228,3 +228,93 @@ TEST_F(LexerTest, ParseExplain) {
     auto explain_stmt = dynamic_cast<ExplainStmt*>(ast->statement());
     ASSERT_NE(explain_stmt, nullptr);
 }
+
+// CREATE VIEW 测试
+TEST_F(LexerTest, ParseCreateView) {
+    auto ast = parseSQL("CREATE VIEW v_sales_summary AS SELECT product, quantity FROM sales");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto create_view_stmt = dynamic_cast<CreateViewStmt*>(ast->statement());
+    ASSERT_NE(create_view_stmt, nullptr);
+    EXPECT_EQ(create_view_stmt->viewName(), "v_sales_summary");
+    ASSERT_NE(create_view_stmt->selectStmt(), nullptr);
+    EXPECT_EQ(create_view_stmt->selectStmt()->fromTable(), "sales");
+}
+
+TEST_F(LexerTest, ParseCreateViewWithExpression) {
+    // Test CREATE VIEW with multiplication expression (quantity * price)
+    auto ast = parseSQL("CREATE VIEW v_sales_summary AS SELECT product, quantity, quantity * price as total_amount FROM sales");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto create_view_stmt = dynamic_cast<CreateViewStmt*>(ast->statement());
+    ASSERT_NE(create_view_stmt, nullptr);
+    EXPECT_EQ(create_view_stmt->viewName(), "v_sales_summary");
+    ASSERT_NE(create_view_stmt->selectStmt(), nullptr);
+}
+
+// Test multi-row INSERT with NULL values
+TEST_F(LexerTest, ParseMultiRowInsertWithNull) {
+    auto ast = parseSQL("INSERT INTO test_expr VALUES (1, 10), (2, 20), (3, NULL)");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto insert_stmt = dynamic_cast<InsertStmt*>(ast->statement());
+    ASSERT_NE(insert_stmt, nullptr);
+    EXPECT_EQ(insert_stmt->table(), "test_expr");
+}
+
+TEST_F(LexerTest, ParseSingleRowInsertWithNull) {
+    auto ast = parseSQL("INSERT INTO test_expr VALUES (1, NULL)");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto insert_stmt = dynamic_cast<InsertStmt*>(ast->statement());
+    ASSERT_NE(insert_stmt, nullptr);
+    EXPECT_EQ(insert_stmt->table(), "test_expr");
+}
+
+TEST_F(LexerTest, ParseSelectDistinct) {
+    auto ast = parseSQL("SELECT DISTINCT department FROM employees");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto select_stmt = dynamic_cast<SelectStmt*>(ast->statement());
+    ASSERT_NE(select_stmt, nullptr);
+    EXPECT_TRUE(select_stmt->isDistinct());
+    EXPECT_EQ(select_stmt->fromTable(), "employees");
+}
+
+TEST_F(LexerTest, ParseSelectDistinctStar) {
+    auto ast = parseSQL("SELECT DISTINCT * FROM employees");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto select_stmt = dynamic_cast<SelectStmt*>(ast->statement());
+    ASSERT_NE(select_stmt, nullptr);
+    EXPECT_TRUE(select_stmt->isDistinct());
+    EXPECT_EQ(select_stmt->fromTable(), "employees");
+}
+
+TEST_F(LexerTest, ParseSelectWithoutDistinct) {
+    auto ast = parseSQL("SELECT department FROM employees");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto select_stmt = dynamic_cast<SelectStmt*>(ast->statement());
+    ASSERT_NE(select_stmt, nullptr);
+    EXPECT_FALSE(select_stmt->isDistinct());
+    EXPECT_EQ(select_stmt->fromTable(), "employees");
+}
+
+TEST_F(LexerTest, ParseEmptyString) {
+    auto ast = parseSQL("INSERT INTO large_values VALUES (3, '', -2147483648)");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto insert_stmt = dynamic_cast<InsertStmt*>(ast->statement());
+    ASSERT_NE(insert_stmt, nullptr);
+    EXPECT_EQ(insert_stmt->table(), "large_values");
+}
+

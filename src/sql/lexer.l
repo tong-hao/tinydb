@@ -53,6 +53,7 @@ NEWLINE     \n
 "CREATE"        { return CREATE; }
 "DROP"          { return DROP; }
 "TABLE"         { return TABLE; }
+"VIEW"          { return VIEW; }
 "INDEX"         { return INDEX; }
 "ON"            { return ON; }
 "AND"           { return AND; }

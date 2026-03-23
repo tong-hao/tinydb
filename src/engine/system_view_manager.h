@@ -3,6 +3,7 @@
 #include "storage/diagnostics_manager.h"
 #include "storage/import_export_manager.h"
 #include "storage/backup_manager.h"
+#include "storage/storage_engine.h"
 #include <string>
 #include <vector>
 #include <memory>
@@ -46,7 +47,8 @@ public:
     SystemViewManager& operator=(const SystemViewManager&) = delete;
 
     // 初始化
-    void initialize(storage::DiagnosticsManager* diag_mgr,
+    void initialize(storage::StorageEngine* storage_engine,
+                   storage::DiagnosticsManager* diag_mgr,
                    storage::ImportExportManager* import_export_mgr,
                    storage::BackupManager* backup_mgr);
 
@@ -64,6 +66,7 @@ public:
     bool getViewDefinition(const std::string& view_name, SystemView& view) const;
 
 private:
+    storage::StorageEngine* storage_engine_;
     storage::DiagnosticsManager* diag_mgr_;
     storage::ImportExportManager* import_export_mgr_;
     storage::BackupManager* backup_mgr_;

@@ -132,6 +132,9 @@ public:
     // ALTER TABLE: 重命名表
     bool renameTable(const std::string& old_name, const std::string& new_name);
 
+    // ALTER TABLE: 重命名列
+    bool renameColumn(const std::string& table_name, const std::string& old_col_name, const std::string& new_col_name);
+
 private:
     StorageConfig config_;
     std::unique_ptr<DiskManager> disk_manager_;

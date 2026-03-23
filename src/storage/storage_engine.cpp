@@ -213,6 +213,15 @@ void StorageEngine::shutdown() {
     g_transaction_manager = nullptr;
 
     // 关闭组件（按照依赖顺序反向关闭）
+    // Phase 4: 先关闭索引和统计管理器（它们依赖table_manager）
+    LOG_INFO("Resetting index_manager...");
+    index_manager_.reset();
+    LOG_INFO("index_manager reset done");
+
+    LOG_INFO("Resetting stats_manager...");
+    stats_manager_.reset();
+    LOG_INFO("stats_manager reset done");
+
     LOG_INFO("Resetting lock_manager...");
     lock_manager_.reset();
     LOG_INFO("lock_manager reset done");
@@ -461,6 +470,15 @@ bool StorageEngine::renameTable(const std::string& old_name, const std::string& 
         return false;
     }
     return table_manager_->renameTable(old_name, new_name);
+}
+
+// ALTER TABLE: 重命名列
+bool StorageEngine::renameColumn(const std::string& table_name, const std::string& old_col_name, const std::string& new_col_name) {
+    if (!initialized_) {
+        LOG_ERROR("Storage engine not initialized");
+        return false;
+    }
+    return table_manager_->renameColumn(table_name, old_col_name, new_col_name);
 }
 
 } // namespace storage

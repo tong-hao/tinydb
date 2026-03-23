@@ -80,13 +80,18 @@ void Server::stop() {
         ::close(fd);
     }
 
+    // 等待acceptLoop结束
+    LOG_INFO("Waiting for acceptLoop to finish...");
+    // 短暂等待确保acceptLoop看到running_变化
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
     // 等待所有客户端线程结束（带超时）
     std::lock_guard<std::mutex> lock(threads_mutex_);
-    LOG_INFO("Detaching " << client_threads_.size() << " client threads");
+    LOG_INFO("Joining " << client_threads_.size() << " client threads");
     for (auto& t : client_threads_) {
         if (t.joinable()) {
-            // 使用 detach 避免阻塞主线程
-            t.detach();
+            // 短暂等待线程完成
+            t.join();
         }
     }
     client_threads_.clear();

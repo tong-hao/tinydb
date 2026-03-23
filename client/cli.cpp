@@ -237,13 +237,60 @@ bool handleMetaCommand(const std::string& cmd) {
 
     // \dt - 列出表
     if (meta == "\\dt" || meta == "\\dt+") {
+        // 查询 tn_tables 系统视图获取真实表列表
+        auto result = g_client.execute("SELECT schemaname, tablename, tableowner, tablespace "
+                                       "FROM tn_tables WHERE schemaname = 'public'");
+        if (!result.success()) {
+            std::cout << "Error querying tables: " << result.message() << "\n";
+            return true;
+        }
+
         std::cout << "List of relations\n";
         std::cout << " Schema | Name | Type | Owner \n";
         std::cout << "--------+------+------+-------\n";
-        // 这里应该查询系统表获取真实数据
-        // 简化实现
-        std::cout << " public | users | table | " << g_current_user << "\n";
-        std::cout << " public | orders | table | " << g_current_user << "\n";
+
+        // 解析结果并格式化输出
+        // executor 返回格式:
+        // Table: tn_tables
+        // --------------------
+        // schemaname\ttablename\ttableowner\ttablespace
+        // public\tt1\ttinydb\ttn_default
+        // --------------------
+        // Total rows: N
+        std::istringstream iss(result.message());
+        std::string line;
+        bool found_header = false;
+        int row_count = 0;
+        while (std::getline(iss, line)) {
+            // 跳过表名行
+            if (line.find("Table:") == 0) continue;
+            // 跳过分隔线
+            if (line.find("----") == 0) continue;
+            // 跳过空行
+            if (line.empty()) continue;
+            // 跳过行数统计行
+            if (line.find("Total rows:") == 0) continue;
+            // 跳过列名行（包含 schemaname）
+            if (line.find("schemaname") != std::string::npos) {
+                found_header = true;
+                continue;
+            }
+
+            // 解析制表符分隔的数据行
+            std::istringstream line_iss(line);
+            std::string schemaname, tablename, tableowner, tablespace;
+            if (std::getline(line_iss, schemaname, '\t') &&
+                std::getline(line_iss, tablename, '\t') &&
+                std::getline(line_iss, tableowner, '\t')) {
+                std::cout << " " << std::left << std::setw(7) << schemaname
+                          << "| " << std::setw(5) << tablename
+                          << "| table | " << tableowner << "\n";
+                row_count++;
+            }
+        }
+        if (row_count == 0) {
+            std::cout << "(no rows)\n";
+        }
         return true;
     }
 

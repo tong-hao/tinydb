@@ -29,6 +29,9 @@ target_link_libraries(network
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
 
+# 确保输出目录存在
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/sql)
+
 # 生成 Flex 词法分析器
 flex_target(LEXER sql/lexer.l ${CMAKE_CURRENT_BINARY_DIR}/sql/lexer_generated.cpp
     COMPILE_FLAGS "--header-file=${CMAKE_CURRENT_BINARY_DIR}/sql/lexer_generated.h"

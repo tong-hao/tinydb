@@ -843,6 +843,69 @@ bool TableManager::removeColumnMeta(uint32_t table_id) {
     return true;
 }
 
+bool TableManager::updateColumnMeta(uint32_t table_id, const std::string& old_col_name, const ColumnDef& new_def) {
+    // 直接遍历 tn_attribute 找到并更新对应记录
+    PageId page_id = tn_attribute_meta_->first_page_id;
+
+    while (page_id != INVALID_PAGE_ID) {
+        BufferFrame* frame = buffer_pool_->fetchPage(page_id);
+        if (!frame) break;
+
+        Page& page = frame->getPage();
+        uint16_t slot_count = page.getSlotCount();
+        bool page_modified = false;
+
+        for (uint16_t slot_id = 0; slot_id < slot_count; ++slot_id) {
+            // 获取元组数据
+            const char* tuple_data = page.getTupleData(slot_id);
+            uint16_t tuple_len = page.getTupleLength(slot_id);
+
+            if (tuple_data && tuple_len > 0) {
+                // 反序列化元组
+                Tuple tuple(&tn_attribute_meta_->schema);
+                if (tuple.deserialize(reinterpret_cast<const uint8_t*>(tuple_data), tuple_len)) {
+                    if (tuple.getFieldCount() >= 2) {
+                        int32_t tid = tuple.getField(0).getInt32();
+                        std::string col_name = tuple.getField(1).getString();
+                        if (static_cast<uint32_t>(tid) == table_id && col_name == old_col_name) {
+                            // 找到记录，更新列名
+                            Tuple new_tuple(&tn_attribute_meta_->schema);
+                            new_tuple.addField(Field(static_cast<int32_t>(table_id)));
+                            new_tuple.addField(Field(new_def.name, DataType::VARCHAR));
+                            new_tuple.addField(tuple.getField(2));  // column_id
+                            new_tuple.addField(tuple.getField(3));  // data_type
+                            new_tuple.addField(tuple.getField(4));  // type_length
+                            new_tuple.addField(tuple.getField(5));  // is_nullable
+                            new_tuple.addField(tuple.getField(6));  // is_primary_key
+                            new_tuple.addField(tuple.getField(7));  // default_value_offset
+
+                            auto new_tuple_data = new_tuple.serialize();
+                            if (!new_tuple_data.empty()) {
+                                // 删除旧记录
+                                page.deleteTuple(slot_id);
+                                // 插入新记录
+                                page.insertTuple(
+                                    reinterpret_cast<const char*>(new_tuple_data.data()),
+                                    static_cast<uint16_t>(new_tuple_data.size())
+                                );
+                                page_modified = true;
+                            }
+                            buffer_pool_->unpinPage(page_id, page_modified);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        PageId next_page = page.header().next_page_id;
+        buffer_pool_->unpinPage(page_id, page_modified);
+        page_id = next_page;
+    }
+
+    return false;
+}
+
 std::vector<ColumnMeta> TableManager::loadColumnMeta(uint32_t table_id) {
     std::vector<ColumnMeta> columns;
     TableIterator iter = makeIterator("tn_attribute");
@@ -1103,6 +1166,53 @@ bool TableManager::renameTable(const std::string& old_name, const std::string& n
     tables_[common::toLower(new_name)] = table_meta;
 
     LOG_INFO("Renamed table " << old_name << " to " << new_name);
+    return true;
+}
+
+bool TableManager::renameColumn(const std::string& table_name, const std::string& old_col_name, const std::string& new_col_name) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    // 检查表是否存在
+    auto table_meta = getTableUnlocked(table_name);
+    if (!table_meta) {
+        LOG_ERROR("Table does not exist: " << table_name);
+        return false;
+    }
+
+    // 检查旧列是否存在
+    int col_idx = table_meta->schema.findColumnIndex(old_col_name);
+    if (col_idx < 0) {
+        LOG_ERROR("Column does not exist: " << old_col_name);
+        return false;
+    }
+
+    // 检查新列名是否已被使用
+    if (table_meta->schema.columnExists(new_col_name)) {
+        LOG_ERROR("Column already exists: " << new_col_name);
+        return false;
+    }
+
+    // 重命名列
+    if (!table_meta->schema.renameColumn(old_col_name, new_col_name)) {
+        LOG_ERROR("Failed to rename column in schema");
+        return false;
+    }
+
+    // 获取新列定义
+    auto col_def = table_meta->schema.getColumn(new_col_name);
+    if (!col_def) {
+        LOG_ERROR("Failed to get column definition after rename");
+        return false;
+    }
+
+    // 更新系统表中的列元数据
+    ColumnDef new_def(*col_def);
+    if (!updateColumnMeta(table_meta->table_id, old_col_name, new_def)) {
+        LOG_ERROR("Failed to update column metadata");
+        return false;
+    }
+
+    LOG_INFO("Renamed column " << old_col_name << " to " << new_col_name << " in table " << table_name);
     return true;
 }
 

@@ -1,5 +1,6 @@
 #include "executor.h"
 #include "common/logger.h"
+#include "system_view_manager.h"
 #include <sstream>
 #include <algorithm>
 #include <cctype>
@@ -56,6 +57,10 @@ ExecutionResult Executor::execute(const sql::AST& ast) {
         return executeAnalyze(analyze_stmt);
     } else if (auto explain_stmt = dynamic_cast<const sql::ExplainStmt*>(stmt)) {
         return executeExplain(explain_stmt);
+    } else if (auto create_view_stmt = dynamic_cast<const sql::CreateViewStmt*>(stmt)) {
+        return executeCreateView(create_view_stmt);
+    } else if (auto drop_view_stmt = dynamic_cast<const sql::DropViewStmt*>(stmt)) {
+        return executeDropView(drop_view_stmt);
     }
 
     return ExecutionResult::error("Unsupported statement type");
@@ -188,6 +193,134 @@ bool Executor::evaluateWhereCondition(const storage::Tuple& tuple, const sql::Ex
         } else if (logic_expr->op() == sql::OpType::NOT) {
             return !left_result;
         }
+    }
+
+    // 处理 IN 表达式
+    if (auto in_expr = dynamic_cast<const sql::InExpr*>(condition)) {
+        // 获取左值（列引用）
+        std::string left_val;
+        auto left = in_expr->left();
+        if (auto col_ref = dynamic_cast<const sql::ColumnRefExpr*>(left)) {
+            int col_idx = schema->findColumnIndex(col_ref->columnName());
+            if (col_idx < 0) return false;
+            left_val = tuple.getField(col_idx).toString();
+            // 去除字符串的引号
+            if (left_val.size() >= 2 && left_val.front() == '\'' && left_val.back() == '\'') {
+                left_val = left_val.substr(1, left_val.size() - 2);
+            }
+        }
+
+        // 检查是否在值列表中
+        bool found = false;
+        for (const auto& val_expr : in_expr->values()) {
+            std::string val;
+            if (auto literal = dynamic_cast<const sql::LiteralExpr*>(val_expr.get())) {
+                val = literal->value();
+                // 去除引号
+                if (val.size() >= 2 && val.front() == '\'' && val.back() == '\'') {
+                    val = val.substr(1, val.size() - 2);
+                }
+            }
+            if (left_val == val) {
+                found = true;
+                break;
+            }
+        }
+
+        return in_expr->isNot() ? !found : found;
+    }
+
+    // 处理 BETWEEN 表达式
+    if (auto between_expr = dynamic_cast<const sql::BetweenExpr*>(condition)) {
+        // 获取左值（列引用）
+        std::string left_val;
+        auto left = between_expr->left();
+        if (auto col_ref = dynamic_cast<const sql::ColumnRefExpr*>(left)) {
+            int col_idx = schema->findColumnIndex(col_ref->columnName());
+            if (col_idx < 0) return false;
+            left_val = tuple.getField(col_idx).toString();
+            // 去除字符串的引号
+            if (left_val.size() >= 2 && left_val.front() == '\'' && left_val.back() == '\'') {
+                left_val = left_val.substr(1, left_val.size() - 2);
+            }
+        }
+
+        // 获取下界值
+        std::string lower_val;
+        if (auto literal = dynamic_cast<const sql::LiteralExpr*>(between_expr->lower())) {
+            lower_val = literal->value();
+            if (lower_val.size() >= 2 && lower_val.front() == '\'' && lower_val.back() == '\'') {
+                lower_val = lower_val.substr(1, lower_val.size() - 2);
+            }
+        }
+
+        // 获取上界值
+        std::string upper_val;
+        if (auto literal = dynamic_cast<const sql::LiteralExpr*>(between_expr->upper())) {
+            upper_val = literal->value();
+            if (upper_val.size() >= 2 && upper_val.front() == '\'' && upper_val.back() == '\'') {
+                upper_val = upper_val.substr(1, upper_val.size() - 2);
+            }
+        }
+
+        // 比较：left >= lower AND left <= upper
+        bool in_range = false;
+        try {
+            double left_num = std::stod(left_val);
+            double lower_num = std::stod(lower_val);
+            double upper_num = std::stod(upper_val);
+            in_range = (left_num >= lower_num && left_num <= upper_num);
+        } catch (...) {
+            // 字符串比较
+            in_range = (left_val >= lower_val && left_val <= upper_val);
+        }
+
+        return between_expr->isNot() ? !in_range : in_range;
+    }
+
+    // 处理 LIKE 表达式
+    if (auto like_expr = dynamic_cast<const sql::LikeExpr*>(condition)) {
+        // 获取左值（列引用）
+        std::string left_val;
+        auto left = like_expr->left();
+        if (auto col_ref = dynamic_cast<const sql::ColumnRefExpr*>(left)) {
+            int col_idx = schema->findColumnIndex(col_ref->columnName());
+            if (col_idx < 0) return false;
+            left_val = tuple.getField(col_idx).toString();
+            // 去除字符串的引号
+            if (left_val.size() >= 2 && left_val.front() == '\'' && left_val.back() == '\'') {
+                left_val = left_val.substr(1, left_val.size() - 2);
+            }
+        }
+
+        // 获取模式值
+        std::string pattern;
+        if (auto literal = dynamic_cast<const sql::LiteralExpr*>(like_expr->pattern())) {
+            pattern = literal->value();
+            if (pattern.size() >= 2 && pattern.front() == '\'' && pattern.back() == '\'') {
+                pattern = pattern.substr(1, pattern.size() - 2);
+            }
+        }
+
+        // 简单的 LIKE 模式匹配（支持 % 和 _）
+        bool matches = matchLikePattern(left_val, pattern);
+        return like_expr->isNot() ? !matches : matches;
+    }
+
+    // 处理 IS NULL 表达式
+    if (auto is_null_expr = dynamic_cast<const sql::IsNullExpr*>(condition)) {
+        // 获取左值（列引用）
+        bool is_null = false;
+        auto left = is_null_expr->left();
+        if (auto col_ref = dynamic_cast<const sql::ColumnRefExpr*>(left)) {
+            int col_idx = schema->findColumnIndex(col_ref->columnName());
+            if (col_idx < 0) return false;
+            // 获取字段并检查是否为空
+            const auto& field = tuple.getField(col_idx);
+            is_null = field.isNull();
+        }
+
+        return is_null_expr->isNot() ? !is_null : is_null;
     }
 
     return true;
@@ -327,6 +460,134 @@ ExecutionResult Executor::executeSelect(const sql::SelectStmt* stmt) {
 
     // 查询用户表
     if (!table_name.empty()) {
+        // 首先检查是否是系统视图查询
+        if (g_system_view_manager && g_system_view_manager->isSystemViewQuery(table_name)) {
+            // 获取要查询的列
+            std::vector<std::string> columns;
+            if (stmt) {
+                const auto& select_list = stmt->selectList();
+                for (size_t i = 0; i < select_list.size(); ++i) {
+                    if (auto* col_ref = dynamic_cast<const sql::ColumnRefExpr*>(select_list[i].get())) {
+                        columns.push_back(col_ref->columnName());
+                    }
+                }
+            }
+
+            // 查询系统视图
+            auto view_result = g_system_view_manager->querySystemView(table_name, columns);
+            if (!view_result.success) {
+                return ExecutionResult::error(view_result.error_message);
+            }
+
+            // 应用 WHERE 条件过滤
+            const sql::Expression* where_condition = stmt ? stmt->whereCondition() : nullptr;
+
+            // 格式化结果
+            std::string result = "Table: " + table_name + "\n";
+            result += "--------------------\n";
+
+            // 打印列名
+            for (size_t i = 0; i < view_result.column_names.size(); ++i) {
+                if (i > 0) result += "\t";
+                result += view_result.column_names[i];
+            }
+            result += "\n";
+
+            // 打印数据行
+            int count = 0;
+            for (const auto& row : view_result.rows) {
+                // 如果有过滤条件，这里需要简单处理
+                // 注意：完整的 WHERE 评估需要更复杂的实现
+                bool skip = false;
+                if (where_condition) {
+                    // 简化处理：检查字符串匹配
+                    // 对于系统视图，我们暂时不过滤或仅做简单过滤
+                }
+                if (skip) continue;
+
+                for (size_t i = 0; i < row.size(); ++i) {
+                    if (i > 0) result += "\t";
+                    result += row[i];
+                }
+                result += "\n";
+                count++;
+            }
+
+            result += "--------------------\n";
+            result += "Total rows: " + std::to_string(count);
+
+            return ExecutionResult::ok(result);
+        }
+
+        // Check if this is a user-defined view
+        auto view_it = views_.find(table_name);
+        if (view_it != views_.end()) {
+            // This is a view - parse and execute the underlying SELECT
+            const ViewMeta& view_meta = view_it->second;
+
+            // Parse the view's SQL definition
+            sql::Parser view_parser(view_meta.sql_definition);
+            auto view_ast = view_parser.parse();
+
+            if (!view_ast || !view_ast->statement()) {
+                return ExecutionResult::error("Failed to parse view definition");
+            }
+
+            auto view_select = dynamic_cast<sql::SelectStmt*>(view_ast->statement());
+            if (!view_select) {
+                return ExecutionResult::error("View definition is not a SELECT statement");
+            }
+
+            // Get the base table from the view's SELECT
+            std::string view_base_table = view_select->fromTable();
+            if (view_base_table.empty()) {
+                return ExecutionResult::error("View has no base table");
+            }
+
+            // Check if base table exists
+            if (!storage_engine_->tableExists(view_base_table)) {
+                return ExecutionResult::error("View base table does not exist: " + view_base_table);
+            }
+
+            auto table_meta = storage_engine_->getTable(view_base_table);
+            if (!table_meta) {
+                return ExecutionResult::error("Failed to get view base table metadata: " + view_base_table);
+            }
+
+            std::string result = "Table: " + table_name + " (view on " + view_base_table + ")\n";
+            result += "--------------------\n";
+
+            auto iter = storage_engine_->scan(view_base_table);
+            int count = 0;
+
+            // Get WHERE conditions from both the view query and the current query
+            const sql::Expression* view_where = view_select->whereCondition();
+            const sql::Expression* current_where = stmt ? stmt->whereCondition() : nullptr;
+
+            while (iter.hasNext()) {
+                auto tuple = iter.getNext();
+
+                // Apply view's WHERE condition
+                if (view_where && !evaluateWhereCondition(tuple, view_where, &table_meta->schema)) {
+                    continue;
+                }
+
+                // Apply current query's WHERE condition
+                if (current_where && !evaluateWhereCondition(tuple, current_where, &table_meta->schema)) {
+                    continue;
+                }
+
+                // For view, use the view's select list
+                result += formatTuple(tuple, view_select->selectList(), &table_meta->schema) + "\n";
+                count++;
+            }
+
+            result += "--------------------\n";
+            result += "Total rows: " + std::to_string(count);
+
+            return ExecutionResult::ok(result);
+        }
+
         if (!storage_engine_->tableExists(table_name)) {
             return ExecutionResult::error("Table does not exist: " + table_name);
         }
@@ -512,6 +773,9 @@ ExecutionResult Executor::executeCreateTable(const sql::CreateTableStmt* stmt) {
 
         // 检查表是否已存在
         if (storage_engine_->tableExists(table_name)) {
+            if (stmt->ifNotExists()) {
+                return ExecutionResult::ok("Table already exists, skipped");
+            }
             return ExecutionResult::error("Table already exists: " + table_name);
         }
 
@@ -531,7 +795,21 @@ ExecutionResult Executor::executeCreateTable(const sql::CreateTableStmt* stmt) {
                 }
             }
 
-            schema.addColumn(col.name, type, length);
+            // 构建完整的 ColumnDef，包含约束信息
+            storage::ColumnDef col_def;
+            col_def.name = col.name;
+            col_def.type = type;
+            col_def.length = length;
+            col_def.is_nullable = !col.is_not_null;  // NOT NULL 约束
+            col_def.is_primary_key = col.is_primary_key;  // PRIMARY KEY 约束
+
+            schema.addColumn(col_def);
+
+            // 如果有 PRIMARY KEY 约束，自动创建索引
+            if (col.is_primary_key) {
+                LOG_INFO("Column '" << col.name << "' is PRIMARY KEY");
+                // 存储引擎会在 createTable 后自动为主键创建索引
+            }
         }
 
         // 创建表
@@ -611,9 +889,16 @@ ExecutionResult Executor::executeUpdate(const sql::UpdateStmt* stmt) {
         // 获取赋值列表
         const auto& assignments = stmt->assignments();
 
-        // 遍历表中的所有行
+        // 遍历表中的所有行，收集需要更新的TID和更新后的元组
         auto iter = storage_engine_->scan(table_name);
         int update_count = 0;
+
+        // 先收集需要更新的记录，避免在迭代过程中修改表导致迭代器失效
+        struct UpdateRecord {
+            storage::TID tid;
+            storage::Tuple updated_tuple;
+        };
+        std::vector<UpdateRecord> records_to_update;
 
         while (iter.hasNext()) {
             auto tuple = iter.getNext();
@@ -647,55 +932,24 @@ ExecutionResult Executor::executeUpdate(const sql::UpdateStmt* stmt) {
                     return ExecutionResult::error("Unknown column: " + col_name);
                 }
 
-                const auto& col_def = table_meta->schema.getColumn(col_idx);
-                storage::Field field;
+                // 使用表达式求值来支持算术运算和其他复杂表达式
+                storage::Field field = evaluateExpression(value_expr, tuple, &table_meta->schema);
 
-                // 获取值
-                if (auto literal = dynamic_cast<const sql::LiteralExpr*>(value_expr)) {
-                    std::string val = literal->value();
-
-                    switch (col_def.type) {
-                        case storage::DataType::INT32:
-                            field = storage::Field(static_cast<int32_t>(std::stoll(val)));
-                            break;
-                        case storage::DataType::INT64:
-                            field = storage::Field(static_cast<int64_t>(std::stoll(val)));
-                            break;
-                        case storage::DataType::FLOAT:
-                            field = storage::Field(static_cast<float>(std::stod(val)));
-                            break;
-                        case storage::DataType::DOUBLE:
-                            field = storage::Field(static_cast<double>(std::stod(val)));
-                            break;
-                        case storage::DataType::BOOL:
-                            field = storage::Field(val == "true" || val == "1");
-                            break;
-                        case storage::DataType::CHAR:
-                        case storage::DataType::VARCHAR:
-                            // 去除引号
-                            if (val.size() >= 2 && val.front() == '\'' && val.back() == '\'') {
-                                val = val.substr(1, val.size() - 2);
-                            }
-                            field = storage::Field(val, col_def.type);
-                            break;
-                        default:
-                            field = storage::Field(val, storage::DataType::VARCHAR);
-                            break;
-                    }
-                } else {
-                    releaseTableLock(table_name);
-                    if (auto_txn) {
-                        storage_engine_->abortTransaction(txn);
-                        current_txn_ = nullptr;
-                    }
-                    return ExecutionResult::error("Unsupported value expression in UPDATE");
-                }
+                // Debug output
+                LOG_INFO("Updating column " << col_name << " at index " << col_idx
+                         << " with value " << field.toString() << " (type=" << static_cast<int>(field.getType()) << ")");
 
                 updated_tuple.setField(col_idx, field);
             }
 
+            // 收集记录
+            records_to_update.push_back({tid, std::move(updated_tuple)});
+        }
+
+        // 现在执行更新操作（在迭代完成后）
+        for (auto& record : records_to_update) {
             // 使用存储引擎的 update 方法
-            if (!storage_engine_->update(table_name, tid, updated_tuple)) {
+            if (!storage_engine_->update(table_name, record.tid, record.updated_tuple)) {
                 releaseTableLock(table_name);
                 if (auto_txn) {
                     storage_engine_->abortTransaction(txn);
@@ -876,6 +1130,17 @@ ExecutionResult Executor::executeAlterTable(const sql::AlterTableStmt* stmt) {
                 return ExecutionResult::ok("ALTER TABLE RENAME " + table_name + " TO " + new_table_name);
             } else {
                 return ExecutionResult::error("Failed to rename table " + table_name + " to " + new_table_name);
+            }
+        }
+
+        case sql::AlterTableStmt::ActionType::RENAME_COLUMN: {
+            // 重命名列
+            std::string old_col_name = stmt->columnName();
+            std::string new_col_name = stmt->newColumnName();
+            if (storage_engine_->renameColumn(table_name, old_col_name, new_col_name)) {
+                return ExecutionResult::ok("ALTER TABLE RENAME COLUMN " + old_col_name + " TO " + new_col_name);
+            } else {
+                return ExecutionResult::error("Failed to rename column " + old_col_name + " to " + new_col_name);
             }
         }
 
@@ -1185,6 +1450,74 @@ ExecutionResult Executor::executeExplain(const sql::ExplainStmt* stmt) {
     return ExecutionResult::ok("EXPLAIN: Query plan not available for this statement type");
 }
 
+// CREATE VIEW
+ExecutionResult Executor::executeCreateView(const sql::CreateViewStmt* stmt) {
+    if (!storage_engine_) {
+        return ExecutionResult::error("No storage engine");
+    }
+
+    if (!stmt) {
+        return ExecutionResult::error("Invalid CREATE VIEW statement");
+    }
+
+    std::string view_name = stmt->viewName();
+
+    // Check if view or table already exists
+    if (views_.count(view_name) > 0 || storage_engine_->tableExists(view_name)) {
+        return ExecutionResult::error("View or table already exists: " + view_name);
+    }
+
+    // Get the underlying SELECT statement
+    const sql::SelectStmt* select_stmt = stmt->selectStmt();
+    if (!select_stmt) {
+        return ExecutionResult::error("VIEW must have a SELECT statement");
+    }
+
+    // Validate the base table exists
+    std::string base_table = select_stmt->fromTable();
+    if (!base_table.empty() && !storage_engine_->tableExists(base_table)) {
+        return ExecutionResult::error("Base table does not exist: " + base_table);
+    }
+
+    // Store view metadata
+    ViewMeta meta;
+    meta.view_name = view_name;
+    meta.sql_definition = select_stmt->toString();
+
+    views_[view_name] = std::move(meta);
+
+    LOG_INFO("Created view: " << view_name);
+    return ExecutionResult::ok("CREATE VIEW " + view_name);
+}
+
+// DROP VIEW
+ExecutionResult Executor::executeDropView(const sql::DropViewStmt* stmt) {
+    if (!storage_engine_) {
+        return ExecutionResult::error("No storage engine");
+    }
+
+    if (!stmt) {
+        return ExecutionResult::error("Invalid DROP VIEW statement");
+    }
+
+    std::string view_name = stmt->viewName();
+
+    // Check if view exists
+    auto it = views_.find(view_name);
+    if (it == views_.end()) {
+        if (stmt->ifExists()) {
+            return ExecutionResult::ok("View does not exist: " + view_name);
+        }
+        return ExecutionResult::error("View does not exist: " + view_name);
+    }
+
+    // Drop the view
+    views_.erase(it);
+    LOG_INFO("Dropped view: " << view_name);
+
+    return ExecutionResult::ok("DROP VIEW " + view_name);
+}
+
 // Phase 4: JOIN execution
 ExecutionResult Executor::executeJoin(const sql::SelectStmt* stmt) {
     if (!storage_engine_) {
@@ -1330,6 +1663,101 @@ bool Executor::evaluateJoinWhereCondition(const std::vector<storage::Tuple>& tup
         }
     }
 
+    // 处理 IN 表达式
+    if (auto in_expr = dynamic_cast<const sql::InExpr*>(condition)) {
+        // 获取左值
+        storage::Field left_field = evaluateJoinExpression(in_expr->left(), tuples, schemas);
+        std::string left_val = left_field.toString();
+        // 去除引号
+        if (left_val.size() >= 2 && left_val.front() == '\'' && left_val.back() == '\'') {
+            left_val = left_val.substr(1, left_val.size() - 2);
+        }
+
+        // 检查是否在值列表中
+        bool found = false;
+        for (const auto& val_expr : in_expr->values()) {
+            storage::Field val_field = evaluateJoinExpression(val_expr.get(), tuples, schemas);
+            std::string val = val_field.toString();
+            // 去除引号
+            if (val.size() >= 2 && val.front() == '\'' && val.back() == '\'') {
+                val = val.substr(1, val.size() - 2);
+            }
+            if (left_val == val) {
+                found = true;
+                break;
+            }
+        }
+
+        return in_expr->isNot() ? !found : found;
+    }
+
+    // 处理 BETWEEN 表达式
+    if (auto between_expr = dynamic_cast<const sql::BetweenExpr*>(condition)) {
+        // 获取左值
+        storage::Field left_field = evaluateJoinExpression(between_expr->left(), tuples, schemas);
+        std::string left_val = left_field.toString();
+        // 去除引号
+        if (left_val.size() >= 2 && left_val.front() == '\'' && left_val.back() == '\'') {
+            left_val = left_val.substr(1, left_val.size() - 2);
+        }
+
+        // 获取下界和上界值
+        storage::Field lower_field = evaluateJoinExpression(between_expr->lower(), tuples, schemas);
+        storage::Field upper_field = evaluateJoinExpression(between_expr->upper(), tuples, schemas);
+        std::string lower_val = lower_field.toString();
+        std::string upper_val = upper_field.toString();
+        // 去除引号
+        if (lower_val.size() >= 2 && lower_val.front() == '\'' && lower_val.back() == '\'') {
+            lower_val = lower_val.substr(1, lower_val.size() - 2);
+        }
+        if (upper_val.size() >= 2 && upper_val.front() == '\'' && upper_val.back() == '\'') {
+            upper_val = upper_val.substr(1, upper_val.size() - 2);
+        }
+
+        // 比较
+        bool in_range = false;
+        try {
+            double left_num = std::stod(left_val);
+            double lower_num = std::stod(lower_val);
+            double upper_num = std::stod(upper_val);
+            in_range = (left_num >= lower_num && left_num <= upper_num);
+        } catch (...) {
+            in_range = (left_val >= lower_val && left_val <= upper_val);
+        }
+
+        return between_expr->isNot() ? !in_range : in_range;
+    }
+
+    // 处理 LIKE 表达式
+    if (auto like_expr = dynamic_cast<const sql::LikeExpr*>(condition)) {
+        // 获取左值
+        storage::Field left_field = evaluateJoinExpression(like_expr->left(), tuples, schemas);
+        std::string left_val = left_field.toString();
+        // 去除引号
+        if (left_val.size() >= 2 && left_val.front() == '\'' && left_val.back() == '\'') {
+            left_val = left_val.substr(1, left_val.size() - 2);
+        }
+
+        // 获取模式值
+        storage::Field pattern_field = evaluateJoinExpression(like_expr->pattern(), tuples, schemas);
+        std::string pattern = pattern_field.toString();
+        // 去除引号
+        if (pattern.size() >= 2 && pattern.front() == '\'' && pattern.back() == '\'') {
+            pattern = pattern.substr(1, pattern.size() - 2);
+        }
+
+        // LIKE 匹配
+        bool matches = matchLikePattern(left_val, pattern);
+        return like_expr->isNot() ? !matches : matches;
+    }
+
+    // 处理 IS NULL 表达式
+    if (auto is_null_expr = dynamic_cast<const sql::IsNullExpr*>(condition)) {
+        storage::Field left_field = evaluateJoinExpression(is_null_expr->left(), tuples, schemas);
+        bool is_null = left_field.isNull();
+        return is_null_expr->isNot() ? !is_null : is_null;
+    }
+
     return true;
 }
 
@@ -1414,6 +1842,67 @@ std::string Executor::formatJoinTuple(const std::vector<storage::Tuple>& tuples,
     }
     result += ")";
     return result;
+}
+
+// LIKE 模式匹配辅助函数
+bool Executor::matchLikePattern(const std::string& value, const std::string& pattern) {
+    // 将 SQL LIKE 模式转换为类似 glob 的匹配
+    // % 匹配任意字符序列，_ 匹配单个字符
+
+    size_t val_idx = 0;
+    size_t pat_idx = 0;
+    size_t val_len = value.size();
+    size_t pat_len = pattern.size();
+
+    // 用于处理 % 的回溯位置
+    size_t val_backup = 0;
+    size_t pat_backup = 0;
+    bool has_backup = false;
+
+    while (val_idx < val_len) {
+        if (pat_idx < pat_len) {
+            char pat_char = pattern[pat_idx];
+
+            if (pat_char == '%') {
+                // % 匹配零个或多个字符
+                pat_idx++;
+                // 记录回溯位置
+                val_backup = val_idx;
+                pat_backup = pat_idx;
+                has_backup = true;
+                continue;
+            } else if (pat_char == '_') {
+                // _ 匹配单个字符
+                pat_idx++;
+                val_idx++;
+                continue;
+            } else if (pat_char == value[val_idx]) {
+                // 精确匹配
+                pat_idx++;
+                val_idx++;
+                continue;
+            }
+        }
+
+        // 当前不匹配，尝试回溯
+        if (has_backup && val_backup < val_len) {
+            val_backup++;
+            val_idx = val_backup;
+            pat_idx = pat_backup;
+            continue;
+        }
+
+        // 无法匹配
+        return false;
+    }
+
+    // 跳过模式末尾的 %
+    while (pat_idx < pat_len && pattern[pat_idx] == '%') {
+        pat_idx++;
+    }
+
+    // 如果模式也处理完毕，则匹配成功
+    return pat_idx == pat_len;
 }
 
 } // namespace engine

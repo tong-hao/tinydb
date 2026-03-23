@@ -73,6 +73,19 @@ bool Schema::removeColumn(const std::string& name) {
     return true;
 }
 
+bool Schema::renameColumn(const std::string& old_name, const std::string& new_name) {
+    int idx = findColumnIndex(old_name);
+    if (idx < 0) {
+        return false;
+    }
+    // Check if new name already exists
+    if (findColumnIndex(new_name) >= 0) {
+        return false;
+    }
+    columns_[idx].name = new_name;
+    return true;
+}
+
 size_t Schema::getRowMaxSize() const {
     size_t size = 0;
     for (const auto& col : columns_) {

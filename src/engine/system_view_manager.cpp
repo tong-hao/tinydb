@@ -15,7 +15,8 @@ static int64_t getCurrentTimestamp() {
 SystemViewManager* g_system_view_manager = nullptr;
 
 SystemViewManager::SystemViewManager()
-    : diag_mgr_(nullptr)
+    : storage_engine_(nullptr)
+    , diag_mgr_(nullptr)
     , import_export_mgr_(nullptr)
     , backup_mgr_(nullptr) {
     registerSystemViews();
@@ -24,9 +25,11 @@ SystemViewManager::SystemViewManager()
 SystemViewManager::~SystemViewManager() {
 }
 
-void SystemViewManager::initialize(storage::DiagnosticsManager* diag_mgr,
+void SystemViewManager::initialize(storage::StorageEngine* storage_engine,
+                                  storage::DiagnosticsManager* diag_mgr,
                                   storage::ImportExportManager* import_export_mgr,
                                   storage::BackupManager* backup_mgr) {
+    storage_engine_ = storage_engine;
     diag_mgr_ = diag_mgr;
     import_export_mgr_ = import_export_mgr;
     backup_mgr_ = backup_mgr;
@@ -519,7 +522,22 @@ SystemViewResult SystemViewManager::queryPgTables() {
     result.column_names = {"schemaname", "tablename", "tableowner", "tablespace",
                           "hasindexes", "hasrules", "hastriggers"};
 
-    if (diag_mgr_) {
+    // 优先从存储引擎获取真实的表列表
+    if (storage_engine_) {
+        auto table_names = storage_engine_->getAllTableNames();
+        for (const auto& table_name : table_names) {
+            std::vector<std::string> row;
+            row.push_back("public");
+            row.push_back(table_name);
+            row.push_back("tinydb");  // tableowner
+            row.push_back("tn_default");  // tablespace
+            row.push_back("f");  // hasindexes (简化处理)
+            row.push_back("f");  // hasrules
+            row.push_back("f");  // hastriggers
+            result.rows.push_back(row);
+        }
+    } else if (diag_mgr_) {
+        // 如果没有存储引擎，尝试从诊断管理器获取
         auto table_stats = diag_mgr_->getAllTableStats();
         for (const auto& stats : table_stats) {
             std::vector<std::string> row;

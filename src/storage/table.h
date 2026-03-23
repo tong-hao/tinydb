@@ -128,6 +128,9 @@ public:
     // ALTER TABLE: 重命名表
     bool renameTable(const std::string& old_name, const std::string& new_name);
 
+    // ALTER TABLE: 重命名列
+    bool renameColumn(const std::string& table_name, const std::string& old_col_name, const std::string& new_col_name);
+
 private:
     BufferPoolManager* buffer_pool_;
     std::unordered_map<std::string, std::shared_ptr<TableMeta>> tables_;
@@ -155,6 +158,9 @@ private:
 
     // 删除列元数据从tn_attribute
     bool removeColumnMeta(uint32_t table_id);
+
+    // 更新列元数据在tn_attribute
+    bool updateColumnMeta(uint32_t table_id, const std::string& old_col_name, const ColumnDef& new_def);
 
     // 获取表的列元数据
     std::vector<ColumnMeta> loadColumnMeta(uint32_t table_id);
