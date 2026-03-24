@@ -412,7 +412,9 @@ TEST_F(CreateTableTypesTest, ParseAllDataTypes) {
         "CREATE TABLE t7 (c DOUBLE)",
         "CREATE TABLE t8 (c REAL)",
         "CREATE TABLE t9 (c DECIMAL)",
+        "CREATE TABLE t9a (c DECIMAL(10,2))",
         "CREATE TABLE t10 (c NUMERIC)",
+        "CREATE TABLE t10a (c NUMERIC(10,2))",
         "CREATE TABLE t11 (c CHAR)",
         "CREATE TABLE t12 (c CHAR(10))",
         "CREATE TABLE t13 (c VARCHAR(20))",
@@ -430,5 +432,10 @@ TEST_F(CreateTableTypesTest, ParseAllDataTypes) {
         auto ast = parser.parse();
         EXPECT_NE(ast, nullptr) << "Failed to parse: " << sql;
     }
+}
+
+TEST_F(CreateTableTypesTest, CreateSalesTable) {
+    auto result = executor_->execute("CREATE TABLE sales ( id INT PRIMARY KEY, product VARCHAR(100), quantity INT, price DECIMAL(10, 2), sale_date DATE )");
+    EXPECT_TRUE(result.success()) << "Failed: " << result.message();
 }
 

@@ -21,6 +21,7 @@ extern AST* g_ast;
     namespace tinydb {
     namespace sql {
         class AST;
+        class CreateTableStmt;
     }
     }
 }
@@ -61,8 +62,11 @@ extern AST* g_ast;
 
     // 列表类型
     std::vector<std::unique_ptr<Expression>>* expr_list;
+    std::vector<std::vector<std::unique_ptr<Expression>>>* insert_values_list;
     std::vector<std::string>* str_list;
     std::vector<std::pair<std::string, std::string>>* col_def_list;
+    std::vector<CreateTableStmt::ColumnDef>* column_def_list_full;
+    CreateTableStmt::ColumnDef* column_def;
     std::vector<std::pair<std::string, std::unique_ptr<Expression>>>* assignment_list;
 
     // ORDER BY support
@@ -130,6 +134,9 @@ extern AST* g_ast;
 %type <expr_list> select_list value_list
 %type <str_list> column_list
 %type <col_def_list> column_def_list
+%type <column_def_list_full> column_def_list_full
+%type <column_def> column_def
+%type <insert_values_list> insert_values_list
 %type <assignment_list> assignment_list
 
 %type <str> table_name column_name data_type
@@ -141,6 +148,8 @@ extern AST* g_ast;
 
 %destructor { free($$); } <str>
 %destructor { delete $$; } <col_def_list>
+%destructor { delete $$; } <column_def_list_full>
+%destructor { delete $$; } <insert_values_list>
 %destructor { delete $$; } <order_by_list>
 %destructor { delete $$; } <order_by_item>
 %destructor { delete $$; } <limit_offset>
@@ -368,6 +377,10 @@ select_list:
 
 select_item:
     expr { $$ = $1; }
+    | expr AS column_name {
+        $$ = new AliasExpr(std::unique_ptr<Expression>($1), $3);
+        free($3);
+    }
     | STAR { $$ = new ColumnRefExpr("*"); }
     ;
 
@@ -382,6 +395,20 @@ insert_stmt:
                 $$->addValue(std::move(expr));
             }
             delete $6;
+        }
+    }
+    | INSERT INTO table_name VALUES insert_values_list {
+        $$ = new InsertStmt();
+        $$->setTable($3);
+        free($3);
+        if ($5) {
+            for (auto& row : *$5) {
+                $$->addRow();
+                for (auto& expr : row) {
+                    $$->addValue(std::move(expr));
+                }
+            }
+            delete $5;
         }
     }
     | INSERT INTO table_name LPAREN column_list RPAREN VALUES LPAREN value_list RPAREN {
@@ -400,6 +427,45 @@ insert_stmt:
             }
             delete $9;
         }
+    }
+    | INSERT INTO table_name LPAREN column_list RPAREN VALUES insert_values_list {
+        $$ = new InsertStmt();
+        $$->setTable($3);
+        free($3);
+        if ($5) {
+            for (auto& col : *$5) {
+                $$->addColumn(col);
+            }
+            delete $5;
+        }
+        if ($8) {
+            for (auto& row : *$8) {
+                $$->addRow();
+                for (auto& expr : row) {
+                    $$->addValue(std::move(expr));
+                }
+            }
+            delete $8;
+        }
+    }
+    ;
+
+insert_values_list:
+    LPAREN value_list RPAREN {
+        $$ = new std::vector<std::vector<std::unique_ptr<Expression>>>();
+        $$->push_back({});
+        for (auto& expr : *$2) {
+            $$->back().push_back(std::move(expr));
+        }
+        delete $2;
+    }
+    | insert_values_list COMMA LPAREN value_list RPAREN {
+        $$ = $1;
+        $$->push_back({});
+        for (auto& expr : *$4) {
+            $$->back().push_back(std::move(expr));
+        }
+        delete $4;
     }
     ;
 
@@ -480,31 +546,47 @@ delete_stmt:
 
 /* CREATE TABLE 语句 */
 create_table_stmt:
-    CREATE TABLE table_name LPAREN column_def_list RPAREN {
+    CREATE TABLE table_name LPAREN column_def_list_full RPAREN {
         $$ = new CreateTableStmt();
         $$->setTable($3);
         free($3);
         if ($5) {
             for (auto& col : *$5) {
-                $$->addColumn(col.first, col.second);
+                $$->addColumn(std::move(col));
             }
             delete $5;
         }
     }
     ;
 
-column_def_list:
+column_def_list_full:
+    column_def_list_full COMMA column_def {
+        $$ = $1;
+        $$->push_back(std::move(*$3));
+        delete $3;
+    }
+    | column_def {
+        $$ = new std::vector<CreateTableStmt::ColumnDef>();
+        $$->push_back(std::move(*$1));
+        delete $1;
+    }
+    ;
+
+column_def:
     column_name data_type {
-        $$ = new std::vector<std::pair<std::string, std::string>>();
-        $$->push_back({$1, $2});
+        $$ = new CreateTableStmt::ColumnDef{$1, $2, false, false, false, nullptr, ""};
         free($1);
         free($2);
     }
-    | column_def_list COMMA column_name data_type {
-        $$ = $1;
-        $$->push_back({$3, $4});
-        free($3);
-        free($4);
+    | column_name data_type PRIMARY KEY {
+        $$ = new CreateTableStmt::ColumnDef{$1, $2, true, false, false, nullptr, ""};
+        free($1);
+        free($2);
+    }
+    | column_name data_type NOT NULLX {
+        $$ = new CreateTableStmt::ColumnDef{$1, $2, false, true, false, nullptr, ""};
+        free($1);
+        free($2);
     }
     ;
 
@@ -836,6 +918,11 @@ comparison_expr:
             std::unique_ptr<Expression>($1),
             std::unique_ptr<Expression>($3));
     }
+    | expr STAR expr {
+        $$ = new BinaryOpExpr(OpType::MUL,
+            std::unique_ptr<Expression>($1),
+            std::unique_ptr<Expression>($3));
+    }
     | expr DIV expr {
         $$ = new BinaryOpExpr(OpType::DIV,
             std::unique_ptr<Expression>($1),
@@ -890,7 +977,21 @@ data_type:
     | DOUBLE { $$ = strdup("DOUBLE"); }
     | REAL { $$ = strdup("REAL"); }
     | DECIMAL { $$ = strdup("DECIMAL"); }
+    | DECIMAL LPAREN NUMBER COMMA NUMBER RPAREN {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "DECIMAL(%s,%s)", $3, $5);
+        $$ = strdup(buf);
+        free($3);
+        free($5);
+    }
     | NUMERIC { $$ = strdup("NUMERIC"); }
+    | NUMERIC LPAREN NUMBER COMMA NUMBER RPAREN {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "NUMERIC(%s,%s)", $3, $5);
+        $$ = strdup(buf);
+        free($3);
+        free($5);
+    }
     | CHAR { $$ = strdup("CHAR"); }
     | VARCHAR { $$ = strdup("VARCHAR"); }
     | TEXT { $$ = strdup("TEXT"); }
