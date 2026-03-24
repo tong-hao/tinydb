@@ -19,7 +19,8 @@ enum class DataType : uint8_t {
     BOOL = 5,       // 1字节布尔
     CHAR = 6,       // 定长字符串
     VARCHAR = 7,    // 变长字符串
-    NULL_TYPE = 8   // NULL值
+    NULL_TYPE = 8,  // NULL值
+    DECIMAL = 9     // DECIMAL类型（存储为DOUBLE）
 };
 
 // 获取数据类型大小（定长类型）

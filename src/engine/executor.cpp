@@ -362,8 +362,14 @@ std::string Executor::formatTuple(const storage::Tuple& tuple, const std::vector
             }
         } else if (auto literal = dynamic_cast<const sql::LiteralExpr*>(select_list[i].get())) {
             result += literal->value();
+        } else if (auto alias_expr = dynamic_cast<const sql::AliasExpr*>(select_list[i].get())) {
+            // 处理别名表达式 (expr AS alias)
+            storage::Field field = evaluateExpression(alias_expr->expression(), tuple, schema);
+            result += field.toString();
         } else {
-            result += "?";
+            // 处理其他表达式类型（算术运算、比较等）
+            storage::Field field = evaluateExpression(select_list[i].get(), tuple, schema);
+            result += field.toString();
         }
     }
     result += ")";
@@ -718,6 +724,9 @@ ExecutionResult Executor::executeInsert(const sql::InsertStmt* stmt) {
                                 case storage::DataType::DOUBLE:
                                     field = storage::Field(static_cast<double>(std::stod(val)));
                                     break;
+                                case storage::DataType::DECIMAL:
+                                    field = storage::Field(std::stod(val));
+                                    break;
                                 case storage::DataType::BOOL:
                                     field = storage::Field(val == "true" || val == "1");
                                     break;
@@ -801,6 +810,9 @@ ExecutionResult Executor::executeInsert(const sql::InsertStmt* stmt) {
                                 break;
                             case storage::DataType::DOUBLE:
                                 field = storage::Field(static_cast<double>(std::stod(val)));
+                                break;
+                            case storage::DataType::DECIMAL:
+                                field = storage::Field(std::stod(val));
                                 break;
                             case storage::DataType::BOOL:
                                 field = storage::Field(val == "true" || val == "1");
@@ -1268,6 +1280,8 @@ storage::DataType Executor::parseDataType(const std::string& type_str) {
         return storage::DataType::FLOAT;
     } else if (base_type == "DOUBLE") {
         return storage::DataType::DOUBLE;
+    } else if (base_type == "DECIMAL" || base_type == "NUMERIC") {
+        return storage::DataType::DECIMAL;
     } else if (base_type == "BOOL" || base_type == "BOOLEAN") {
         return storage::DataType::BOOL;
     } else if (base_type == "CHAR") {
@@ -1313,9 +1327,15 @@ storage::Field Executor::evaluateExpression(const sql::Expression* expr, const s
         }
         // 尝试解析为数字
         try {
+            // 先尝试整数
             return storage::Field(static_cast<int64_t>(std::stoll(val)));
         } catch (...) {
-            return storage::Field(val, storage::DataType::VARCHAR);
+            // 再尝试浮点数
+            try {
+                return storage::Field(std::stod(val));
+            } catch (...) {
+                return storage::Field(val, storage::DataType::VARCHAR);
+            }
         }
     }
 
@@ -1333,29 +1353,88 @@ storage::Field Executor::evaluateExpression(const sql::Expression* expr, const s
         auto left_val = evaluateExpression(binary_expr->left(), tuple, schema);
         auto right_val = evaluateExpression(binary_expr->right(), tuple, schema);
 
-        // 获取数值
-        int64_t left_num = 0, right_num = 0;
-        try {
-            left_num = std::stoll(left_val.toString());
-        } catch (...) {}
-        try {
-            right_num = std::stoll(right_val.toString());
-        } catch (...) {}
+        // 检查是否有浮点类型
+        bool has_float = (left_val.getType() == storage::DataType::FLOAT ||
+                          left_val.getType() == storage::DataType::DOUBLE ||
+                          left_val.getType() == storage::DataType::DECIMAL ||
+                          right_val.getType() == storage::DataType::FLOAT ||
+                          right_val.getType() == storage::DataType::DOUBLE ||
+                          right_val.getType() == storage::DataType::DECIMAL);
 
-        switch (binary_expr->op()) {
-            case sql::OpType::ADD:
-                return storage::Field(left_num + right_num);
-            case sql::OpType::SUB:
-                return storage::Field(left_num - right_num);
-            case sql::OpType::MUL:
-                return storage::Field(left_num * right_num);
-            case sql::OpType::DIV:
-                if (right_num != 0) {
-                    return storage::Field(left_num / right_num);
+        if (has_float) {
+            // 使用浮点数运算
+            double left_num = 0.0, right_num = 0.0;
+            if (!left_val.isNull()) {
+                if (left_val.getType() == storage::DataType::FLOAT ||
+                    left_val.getType() == storage::DataType::DOUBLE ||
+                    left_val.getType() == storage::DataType::DECIMAL) {
+                    left_num = left_val.getDouble();
+                } else {
+                    try {
+                        left_num = std::stod(left_val.toString());
+                    } catch (...) {
+                        left_num = static_cast<double>(left_val.getInt64());
+                    }
                 }
-                return storage::Field(0);
-            default:
-                return storage::Field();
+            }
+            if (!right_val.isNull()) {
+                if (right_val.getType() == storage::DataType::FLOAT ||
+                    right_val.getType() == storage::DataType::DOUBLE ||
+                    right_val.getType() == storage::DataType::DECIMAL) {
+                    right_num = right_val.getDouble();
+                } else {
+                    try {
+                        right_num = std::stod(right_val.toString());
+                    } catch (...) {
+                        right_num = static_cast<double>(right_val.getInt64());
+                    }
+                }
+            }
+
+            switch (binary_expr->op()) {
+                case sql::OpType::ADD:
+                    return storage::Field(left_num + right_num);
+                case sql::OpType::SUB:
+                    return storage::Field(left_num - right_num);
+                case sql::OpType::MUL:
+                    return storage::Field(left_num * right_num);
+                case sql::OpType::DIV:
+                    if (right_num != 0.0) {
+                        return storage::Field(left_num / right_num);
+                    }
+                    return storage::Field(0.0);
+                default:
+                    return storage::Field();
+            }
+        } else {
+            // 使用整数运算
+            int64_t left_num = 0, right_num = 0;
+            try {
+                left_num = std::stoll(left_val.toString());
+            } catch (...) {
+                left_num = left_val.getInt64();
+            }
+            try {
+                right_num = std::stoll(right_val.toString());
+            } catch (...) {
+                right_num = right_val.getInt64();
+            }
+
+            switch (binary_expr->op()) {
+                case sql::OpType::ADD:
+                    return storage::Field(left_num + right_num);
+                case sql::OpType::SUB:
+                    return storage::Field(left_num - right_num);
+                case sql::OpType::MUL:
+                    return storage::Field(left_num * right_num);
+                case sql::OpType::DIV:
+                    if (right_num != 0) {
+                        return storage::Field(left_num / right_num);
+                    }
+                    return storage::Field(static_cast<int64_t>(0));
+                default:
+                    return storage::Field();
+            }
         }
     }
 

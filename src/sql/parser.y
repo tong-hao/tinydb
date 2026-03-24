@@ -78,6 +78,15 @@ extern AST* g_ast;
 
 %define parse.error verbose
 
+/* 运算符优先级（从低到高） */
+%left OR
+%left AND
+%left EQ NE
+%left LT LE GT GE
+%left PLUS MINUS
+%left STAR DIV MOD
+%right NOT
+
 /* 关键字 */
 %token SELECT INSERT UPDATE DELETE
 %token FROM WHERE INTO VALUES SET
@@ -953,6 +962,48 @@ logical_expr:
         $$ = new LogicalExpr(OpType::NOT,
             std::unique_ptr<Expression>($2),
             nullptr);
+    }
+    | expr IN LPAREN value_list RPAREN {
+        auto values = new std::vector<std::unique_ptr<Expression>>();
+        for (auto& v : *$4) {
+            values->push_back(std::move(v));
+        }
+        delete $4;
+        $$ = new InExpr(std::unique_ptr<Expression>($1), std::move(*values), false);
+        delete values;
+    }
+    | expr NOT IN LPAREN value_list RPAREN {
+        auto values = new std::vector<std::unique_ptr<Expression>>();
+        for (auto& v : *$5) {
+            values->push_back(std::move(v));
+        }
+        delete $5;
+        $$ = new InExpr(std::unique_ptr<Expression>($1), std::move(*values), true);
+        delete values;
+    }
+    | expr BETWEEN expr AND expr {
+        $$ = new BetweenExpr(std::unique_ptr<Expression>($1),
+            std::unique_ptr<Expression>($3),
+            std::unique_ptr<Expression>($5), false);
+    }
+    | expr NOT BETWEEN expr AND expr {
+        $$ = new BetweenExpr(std::unique_ptr<Expression>($1),
+            std::unique_ptr<Expression>($4),
+            std::unique_ptr<Expression>($6), true);
+    }
+    | expr LIKE expr {
+        $$ = new LikeExpr(std::unique_ptr<Expression>($1),
+            std::unique_ptr<Expression>($3), false);
+    }
+    | expr NOT LIKE expr {
+        $$ = new LikeExpr(std::unique_ptr<Expression>($1),
+            std::unique_ptr<Expression>($4), true);
+    }
+    | expr IS NULLX {
+        $$ = new IsNullExpr(std::unique_ptr<Expression>($1), false);
+    }
+    | expr IS NOT NULLX {
+        $$ = new IsNullExpr(std::unique_ptr<Expression>($1), true);
     }
     | LPAREN expr RPAREN {
         $$ = $2;

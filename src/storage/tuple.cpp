@@ -12,6 +12,7 @@ size_t getTypeSize(DataType type) {
         case DataType::INT64: return 8;
         case DataType::FLOAT: return 4;
         case DataType::DOUBLE: return 8;
+        case DataType::DECIMAL: return 8;  // DECIMAL存储为DOUBLE
         case DataType::BOOL: return 1;
         case DataType::NULL_TYPE: return 0;
         default: return 0;
@@ -24,6 +25,7 @@ bool isFixedLength(DataType type) {
            type == DataType::INT64 ||
            type == DataType::FLOAT ||
            type == DataType::DOUBLE ||
+           type == DataType::DECIMAL ||
            type == DataType::BOOL;
 }
 
@@ -180,6 +182,15 @@ bool Schema::deserialize(const uint8_t* data, size_t size) {
 Field::Field(const std::string& val, DataType type) : type_(type), is_null_(false) {
     if (type == DataType::CHAR || type == DataType::VARCHAR) {
         data_ = val;
+    } else if (type == DataType::DECIMAL) {
+        // DECIMAL 类型：将字符串转换为 double 存储
+        try {
+            double dval = std::stod(val);
+            data_.assign(reinterpret_cast<const char*>(&dval), sizeof(dval));
+        } catch (...) {
+            // 转换失败，设为 NULL
+            is_null_ = true;
+        }
     }
 }
 
@@ -211,7 +222,11 @@ float Field::getFloat() const {
 }
 
 double Field::getDouble() const {
-    if (type_ != DataType::DOUBLE || is_null_ || data_.size() != 8) {
+    if (is_null_ || data_.size() != 8) {
+        return 0.0;
+    }
+    // DECIMAL 和 DOUBLE 都使用 getDouble
+    if (type_ != DataType::DOUBLE && type_ != DataType::DECIMAL) {
         return 0.0;
     }
     double val;
@@ -287,6 +302,7 @@ std::string Field::toString() const {
         case DataType::INT64: return std::to_string(getInt64());
         case DataType::FLOAT: return std::to_string(getFloat());
         case DataType::DOUBLE: return std::to_string(getDouble());
+        case DataType::DECIMAL: return std::to_string(getDouble());  // DECIMAL存储为DOUBLE
         case DataType::BOOL: return getBool() ? "true" : "false";
         case DataType::CHAR:
         case DataType::VARCHAR: return "'" + getString() + "'";
