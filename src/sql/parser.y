@@ -103,6 +103,7 @@ extern AST* g_ast;
 %token EXPLAIN ANALYZE DESCRIBE SHOW DATABASES TABLES
 %token BEGIN TRANSACTION COMMIT ROLLBACK
 %token ALTER ADD COLUMN MODIFY RENAME TO TYPE
+%token COUNT SUM AVG MAX MIN
 
 /* 数据类型 */
 %token INT BIGINT SMALLINT TINYINT
@@ -139,7 +140,7 @@ extern AST* g_ast;
 %type <drop_view_stmt> drop_view_stmt
 
 %type <expr> expr select_item opt_where
-%type <expr> comparison_expr logical_expr
+%type <expr> comparison_expr logical_expr aggregate_expr
 %type <expr_list> select_list value_list
 %type <str_list> column_list
 %type <column_def_list_full> column_def_list_full
@@ -1026,6 +1027,7 @@ opt_limit:
 expr:
     comparison_expr { $$ = $1; }
     | logical_expr { $$ = $1; }
+    | aggregate_expr { $$ = $1; }
     ;
 
 comparison_expr:
@@ -1188,6 +1190,28 @@ logical_expr:
     }
     | LPAREN expr RPAREN {
         $$ = $2;
+    }
+    ;
+
+/* 聚合函数表达式 */
+aggregate_expr:
+    COUNT LPAREN STAR RPAREN {
+        $$ = new AggregateExpr(AggregateFunc::COUNT, nullptr, true);
+    }
+    | COUNT LPAREN expr RPAREN {
+        $$ = new AggregateExpr(AggregateFunc::COUNT, std::unique_ptr<Expression>($3), false);
+    }
+    | SUM LPAREN expr RPAREN {
+        $$ = new AggregateExpr(AggregateFunc::SUM, std::unique_ptr<Expression>($3), false);
+    }
+    | AVG LPAREN expr RPAREN {
+        $$ = new AggregateExpr(AggregateFunc::AVG, std::unique_ptr<Expression>($3), false);
+    }
+    | MAX LPAREN expr RPAREN {
+        $$ = new AggregateExpr(AggregateFunc::MAX, std::unique_ptr<Expression>($3), false);
+    }
+    | MIN LPAREN expr RPAREN {
+        $$ = new AggregateExpr(AggregateFunc::MIN, std::unique_ptr<Expression>($3), false);
     }
     ;
 
