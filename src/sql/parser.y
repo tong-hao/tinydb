@@ -74,6 +74,10 @@ extern AST* g_ast;
     std::pair<Expression*, bool>* order_by_item;
     std::vector<std::pair<std::unique_ptr<Expression>, bool>>* order_by_list;
     std::pair<int64_t, int64_t>* limit_offset;
+
+    // JOIN support
+    JoinTable* join_table;
+    std::vector<std::unique_ptr<JoinTable>>* join_table_list;
 }
 
 %define parse.error verbose
@@ -140,7 +144,7 @@ extern AST* g_ast;
 %type <drop_view_stmt> drop_view_stmt
 
 %type <expr> expr select_item opt_where
-%type <expr> comparison_expr logical_expr aggregate_expr
+%type <expr> comparison_expr logical_expr aggregate_expr column_ref
 %type <expr_list> select_list value_list
 %type <str_list> column_list
 %type <column_def_list_full> column_def_list_full
@@ -148,12 +152,14 @@ extern AST* g_ast;
 %type <insert_values_list> insert_values_list
 %type <assignment_list> assignment_list
 
-%type <str> table_name column_name data_type
+%type <str> table_name column_name data_type opt_table_alias
 %type <bool_val> opt_asc_desc
 %type <order_by_item> order_by_item
 %type <order_by_list> opt_order_by order_by_list
 %type <limit_offset> opt_limit
 %type <expr_list> opt_group_by
+%type <join_table> join_clause
+%type <join_table_list> opt_join_clauses
 
 %destructor { free($$); } <str>
 %destructor { delete $$; } <column_def_list_full>
@@ -161,6 +167,8 @@ extern AST* g_ast;
 %destructor { delete $$; } <order_by_list>
 %destructor { delete $$; } <order_by_item>
 %destructor { delete $$; } <limit_offset>
+%destructor { delete $$; } <join_table>
+%destructor { delete $$; } <join_table_list>
 
 %start statement
 
@@ -299,7 +307,7 @@ statement:
 
 /* SELECT 语句 */
 select_stmt:
-    SELECT DISTINCT select_list FROM table_name opt_where opt_group_by opt_order_by opt_limit {
+    SELECT DISTINCT select_list FROM table_name opt_table_alias opt_join_clauses opt_where opt_group_by opt_order_by opt_limit {
         $$ = new SelectStmt();
         $$->setDistinct(true);
         $$->setFromTable($5);
@@ -310,69 +318,83 @@ select_stmt:
             }
             delete $3;
         }
-        if ($6) {
-            $$->setWhereCondition(std::unique_ptr<Expression>($6));
-        }
+        // Add JOIN tables
         if ($7) {
-            // GROUP BY
-            for (auto& expr : *$7) {
-                $$->addGroupByItem(std::move(expr));
+            for (auto& join : *$7) {
+                $$->addJoinTable(std::move(join));
             }
             delete $7;
         }
-        // ORDER BY
         if ($8) {
-            for (auto& item : *$8) {
-                $$->addOrderBy(std::move(item.first), item.second);
-            }
-            delete $8;
+            $$->setWhereCondition(std::unique_ptr<Expression>($8));
         }
-        // LIMIT and OFFSET
         if ($9) {
-            if ($9->first >= 0) {
-                $$->setLimit($9->first);
-            }
-            if ($9->second >= 0) {
-                $$->setOffset($9->second);
+            // GROUP BY
+            for (auto& expr : *$9) {
+                $$->addGroupByItem(std::move(expr));
             }
             delete $9;
         }
+        // ORDER BY
+        if ($10) {
+            for (auto& item : *$10) {
+                $$->addOrderBy(std::move(item.first), item.second);
+            }
+            delete $10;
+        }
+        // LIMIT and OFFSET
+        if ($11) {
+            if ($11->first >= 0) {
+                $$->setLimit($11->first);
+            }
+            if ($11->second >= 0) {
+                $$->setOffset($11->second);
+            }
+            delete $11;
+        }
     }
-    | SELECT DISTINCT STAR FROM table_name opt_where opt_group_by opt_order_by opt_limit {
+    | SELECT DISTINCT STAR FROM table_name opt_table_alias opt_join_clauses opt_where opt_group_by opt_order_by opt_limit {
         $$ = new SelectStmt();
         $$->setDistinct(true);
         $$->addSelectItem(std::make_unique<ColumnRefExpr>("*"));
         $$->setFromTable($5);
         free($5);
-        if ($6) {
-            $$->setWhereCondition(std::unique_ptr<Expression>($6));
-        }
+        // Add JOIN tables
         if ($7) {
-            // GROUP BY
-            for (auto& expr : *$7) {
-                $$->addGroupByItem(std::move(expr));
+            for (auto& join : *$7) {
+                $$->addJoinTable(std::move(join));
             }
             delete $7;
         }
-        // ORDER BY
         if ($8) {
-            for (auto& item : *$8) {
-                $$->addOrderBy(std::move(item.first), item.second);
-            }
-            delete $8;
+            $$->setWhereCondition(std::unique_ptr<Expression>($8));
         }
-        // LIMIT and OFFSET
         if ($9) {
-            if ($9->first >= 0) {
-                $$->setLimit($9->first);
-            }
-            if ($9->second >= 0) {
-                $$->setOffset($9->second);
+            // GROUP BY
+            for (auto& expr : *$9) {
+                $$->addGroupByItem(std::move(expr));
             }
             delete $9;
         }
+        // ORDER BY
+        if ($10) {
+            for (auto& item : *$10) {
+                $$->addOrderBy(std::move(item.first), item.second);
+            }
+            delete $10;
+        }
+        // LIMIT and OFFSET
+        if ($11) {
+            if ($11->first >= 0) {
+                $$->setLimit($11->first);
+            }
+            if ($11->second >= 0) {
+                $$->setOffset($11->second);
+            }
+            delete $11;
+        }
     }
-    | SELECT select_list FROM table_name opt_where opt_group_by opt_order_by opt_limit {
+    | SELECT select_list FROM table_name opt_table_alias opt_join_clauses opt_where opt_group_by opt_order_by opt_limit {
         $$ = new SelectStmt();
         $$->setFromTable($4);
         free($4);
@@ -382,65 +404,79 @@ select_stmt:
             }
             delete $2;
         }
-        if ($5) {
-            $$->setWhereCondition(std::unique_ptr<Expression>($5));
-        }
+        // Add JOIN tables
         if ($6) {
-            // GROUP BY
-            for (auto& expr : *$6) {
-                $$->addGroupByItem(std::move(expr));
+            for (auto& join : *$6) {
+                $$->addJoinTable(std::move(join));
             }
             delete $6;
         }
-        // ORDER BY
         if ($7) {
-            for (auto& item : *$7) {
-                $$->addOrderBy(std::move(item.first), item.second);
-            }
-            delete $7;
+            $$->setWhereCondition(std::unique_ptr<Expression>($7));
         }
-        // LIMIT and OFFSET
         if ($8) {
-            if ($8->first >= 0) {
-                $$->setLimit($8->first);
-            }
-            if ($8->second >= 0) {
-                $$->setOffset($8->second);
+            // GROUP BY
+            for (auto& expr : *$8) {
+                $$->addGroupByItem(std::move(expr));
             }
             delete $8;
         }
+        // ORDER BY
+        if ($9) {
+            for (auto& item : *$9) {
+                $$->addOrderBy(std::move(item.first), item.second);
+            }
+            delete $9;
+        }
+        // LIMIT and OFFSET
+        if ($10) {
+            if ($10->first >= 0) {
+                $$->setLimit($10->first);
+            }
+            if ($10->second >= 0) {
+                $$->setOffset($10->second);
+            }
+            delete $10;
+        }
     }
-    | SELECT STAR FROM table_name opt_where opt_group_by opt_order_by opt_limit {
+    | SELECT STAR FROM table_name opt_table_alias opt_join_clauses opt_where opt_group_by opt_order_by opt_limit {
         $$ = new SelectStmt();
         $$->addSelectItem(std::make_unique<ColumnRefExpr>("*"));
         $$->setFromTable($4);
         free($4);
-        if ($5) {
-            $$->setWhereCondition(std::unique_ptr<Expression>($5));
-        }
+        // Add JOIN tables
         if ($6) {
-            // GROUP BY
-            for (auto& expr : *$6) {
-                $$->addGroupByItem(std::move(expr));
+            for (auto& join : *$6) {
+                $$->addJoinTable(std::move(join));
             }
             delete $6;
         }
-        // ORDER BY
         if ($7) {
-            for (auto& item : *$7) {
-                $$->addOrderBy(std::move(item.first), item.second);
-            }
-            delete $7;
+            $$->setWhereCondition(std::unique_ptr<Expression>($7));
         }
-        // LIMIT and OFFSET
         if ($8) {
-            if ($8->first >= 0) {
-                $$->setLimit($8->first);
-            }
-            if ($8->second >= 0) {
-                $$->setOffset($8->second);
+            // GROUP BY
+            for (auto& expr : *$8) {
+                $$->addGroupByItem(std::move(expr));
             }
             delete $8;
+        }
+        // ORDER BY
+        if ($9) {
+            for (auto& item : *$9) {
+                $$->addOrderBy(std::move(item.first), item.second);
+            }
+            delete $9;
+        }
+        // LIMIT and OFFSET
+        if ($10) {
+            if ($10->first >= 0) {
+                $$->setLimit($10->first);
+            }
+            if ($10->second >= 0) {
+                $$->setOffset($10->second);
+            }
+            delete $10;
         }
     }
     ;
@@ -463,6 +499,71 @@ select_item:
         free($3);
     }
     | STAR { $$ = new ColumnRefExpr("*"); }
+    ;
+
+/* JOIN 子句 */
+opt_table_alias:
+    /* empty */ { $$ = nullptr; }
+    | AS IDENTIFIER { $$ = $2; }
+    | IDENTIFIER { $$ = $1; }
+    ;
+
+opt_join_clauses:
+    /* empty */ { $$ = nullptr; }
+    | opt_join_clauses join_clause {
+        $$ = $1;
+        if (!$$) {
+            $$ = new std::vector<std::unique_ptr<JoinTable>>();
+        }
+        if ($2) {
+            $$->push_back(std::unique_ptr<JoinTable>($2));
+        }
+    }
+    | join_clause {
+        $$ = new std::vector<std::unique_ptr<JoinTable>>();
+        if ($1) {
+            $$->push_back(std::unique_ptr<JoinTable>($1));
+        }
+    }
+    ;
+
+join_clause:
+    JOIN table_name opt_table_alias ON expr {
+        std::string table_name = $2;
+        free($2);
+        if ($3) free($3);
+        $$ = new JoinTable(table_name, JoinType::INNER);
+        if ($5) {
+            $$->setJoinCondition(std::unique_ptr<Expression>($5));
+        }
+    }
+    | INNER JOIN table_name opt_table_alias ON expr {
+        std::string table_name = $3;
+        free($3);
+        if ($4) free($4);
+        $$ = new JoinTable(table_name, JoinType::INNER);
+        if ($6) {
+            $$->setJoinCondition(std::unique_ptr<Expression>($6));
+        }
+    }
+    | LEFT JOIN table_name opt_table_alias ON expr {
+        std::string table_name = $3;
+        free($3);
+        if ($4) free($4);
+        $$ = new JoinTable(table_name, JoinType::LEFT);
+        if ($6) {
+            $$->setJoinCondition(std::unique_ptr<Expression>($6));
+        }
+    }
+    | LEFT OUTER JOIN table_name opt_table_alias ON expr {
+        std::string table_name = $4;
+        free($4);
+        if ($5) free($5);
+        $$ = new JoinTable(table_name, JoinType::LEFT);
+        if ($7) {
+            $$->setJoinCondition(std::unique_ptr<Expression>($7));
+        }
+    }
     ;
 
 /* INSERT 语句 */
@@ -1031,45 +1132,38 @@ expr:
     ;
 
 comparison_expr:
-    column_name EQ expr {
+    column_ref EQ expr {
         $$ = new ComparisonExpr(OpType::EQ,
-            std::make_unique<ColumnRefExpr>($1),
+            std::unique_ptr<Expression>($1),
             std::unique_ptr<Expression>($3));
-        free($1);
     }
-    | column_name NE expr {
+    | column_ref NE expr {
         $$ = new ComparisonExpr(OpType::NE,
-            std::make_unique<ColumnRefExpr>($1),
+            std::unique_ptr<Expression>($1),
             std::unique_ptr<Expression>($3));
-        free($1);
     }
-    | column_name LT expr {
+    | column_ref LT expr {
         $$ = new ComparisonExpr(OpType::LT,
-            std::make_unique<ColumnRefExpr>($1),
+            std::unique_ptr<Expression>($1),
             std::unique_ptr<Expression>($3));
-        free($1);
     }
-    | column_name GT expr {
+    | column_ref GT expr {
         $$ = new ComparisonExpr(OpType::GT,
-            std::make_unique<ColumnRefExpr>($1),
+            std::unique_ptr<Expression>($1),
             std::unique_ptr<Expression>($3));
-        free($1);
     }
-    | column_name LE expr {
+    | column_ref LE expr {
         $$ = new ComparisonExpr(OpType::LE,
-            std::make_unique<ColumnRefExpr>($1),
+            std::unique_ptr<Expression>($1),
             std::unique_ptr<Expression>($3));
-        free($1);
     }
-    | column_name GE expr {
+    | column_ref GE expr {
         $$ = new ComparisonExpr(OpType::GE,
-            std::make_unique<ColumnRefExpr>($1),
+            std::unique_ptr<Expression>($1),
             std::unique_ptr<Expression>($3));
-        free($1);
     }
-    | column_name {
-        $$ = new ColumnRefExpr($1);
-        free($1);
+    | column_ref {
+        $$ = $1;
     }
     | NUMBER {
         $$ = new LiteralExpr($1);
@@ -1267,6 +1361,27 @@ data_type:
         snprintf(buf, sizeof(buf), "VARCHAR(%s)", $3);
         $$ = strdup(buf);
         free($3);
+    }
+    ;
+
+/* 列引用（支持 table.column 语法） */
+column_ref:
+    column_name {
+        $$ = new ColumnRefExpr($1);
+        free($1);
+    }
+    | IDENTIFIER DOT column_name {
+        // table.column 格式
+        std::string qualified_name = std::string($1) + "." + $3;
+        $$ = new ColumnRefExpr(qualified_name);
+        free($1);
+        free($3);
+    }
+    | IDENTIFIER DOT STAR {
+        // table.* 格式
+        std::string qualified_name = std::string($1) + ".*";
+        $$ = new ColumnRefExpr(qualified_name);
+        free($1);
     }
     ;
 
