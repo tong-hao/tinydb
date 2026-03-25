@@ -124,6 +124,13 @@ NEWLINE     \n
  /* ANALYZE */
 "ANALYZE"       { return ANALYZE; }
 
+ /* 聚合函数 */
+"COUNT"         { return COUNT; }
+"SUM"           { return SUM; }
+"AVG"           { return AVG; }
+"MAX"           { return MAX; }
+"MIN"           { return MIN; }
+
  /* 数据类型 */
 "INT"           { yylval.str = strdup(yytext); return INT; }
 "INTEGER"       { yylval.str = strdup(yytext); return INT; }
