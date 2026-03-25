@@ -637,6 +637,18 @@ create_table_stmt:
             delete $5;
         }
     }
+    | CREATE TABLE IF NOT EXISTS table_name LPAREN column_def_list_full RPAREN {
+        $$ = new CreateTableStmt();
+        $$->setTable($6);
+        $$->setIfNotExists(true);
+        free($6);
+        if ($8) {
+            for (auto& col : *$8) {
+                $$->addColumn(std::move(col));
+            }
+            delete $8;
+        }
+    }
     ;
 
 column_def_list_full:
