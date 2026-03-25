@@ -16,6 +16,32 @@ extern YYSTYPE yylval;
 #ifdef BEGIN
 #undef BEGIN
 #endif
+
+// 处理字符串转义序列
+static std::string process_escapes(const char* str, size_t len) {
+    std::string result;
+    result.reserve(len);
+    for (size_t i = 0; i < len; i++) {
+        if (str[i] == '\\' && i + 1 < len) {
+            switch (str[i + 1]) {
+                case 'n': result += '\n'; i++; break;
+                case 't': result += '\t'; i++; break;
+                case 'r': result += '\r'; i++; break;
+                case '\\': result += '\\'; i++; break;
+                case '\'': result += '\''; i++; break;
+                case '"': result += '"'; i++; break;
+                default: result += str[i]; break;
+            }
+        } else if (str[i] == '\'' && i + 1 < len && str[i + 1] == '\'') {
+            // SQL标准: '' 转义为单引号
+            result += '\'';
+            i++;
+        } else {
+            result += str[i];
+        }
+    }
+    return result;
+}
 %}
 
 %option noyywrap
@@ -27,7 +53,7 @@ LETTER      [a-zA-Z_]
 IDENTIFIER  {LETTER}({LETTER}|{DIGIT})*
 INTEGER     {DIGIT}+
 FLOAT       {DIGIT}+\.{DIGIT}*
-STRING      '[^']*'|\"[^\"]*\"
+STRING      '([^']|'')*'|\"([^\"]|\\.)*\"
 WHITESPACE  [ \t\r]+
 NEWLINE     \n
 
@@ -161,9 +187,11 @@ NEWLINE     \n
 
  /* 字符串 */
 {STRING}        {
-                    // 去掉引号
+                    // 去掉引号并处理转义序列
                     std::string s(yytext);
-                    yylval.str = strdup(s.substr(1, s.length()-2).c_str());
+                    std::string content = s.substr(1, s.length()-2);
+                    std::string processed = process_escapes(content.c_str(), content.length());
+                    yylval.str = strdup(processed.c_str());
                     return STRING_LITERAL;
                 }
 
