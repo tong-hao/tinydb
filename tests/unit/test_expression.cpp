@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "sql/ast.h"
+#include "sql/parser/ast.h"
 #include "storage/tuple.h"
 #include "storage/table.h"
 

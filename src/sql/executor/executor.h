@@ -1,40 +1,16 @@
 #pragma once
 
-#include "sql/ast.h"
+#include "sql/parser/ast.h"
 #include "common/error.h"
 #include "storage/storage_engine.h"
-#include "optimizer.h"
+#include "sql/optimizer/optimizer.h"
+#include "execution_result.h"
 #include <string>
 #include <memory>
 #include <unordered_map>
 
 namespace tinydb {
 namespace engine {
-
-// 执行结果
-class ExecutionResult {
-public:
-    ExecutionResult() : success_(true) {}
-    explicit ExecutionResult(std::string message) : success_(true), message_(std::move(message)) {}
-
-    static ExecutionResult ok(const std::string& msg = "OK") {
-        return ExecutionResult(msg);
-    }
-
-    static ExecutionResult error(const std::string& msg) {
-        ExecutionResult result;
-        result.success_ = false;
-        result.message_ = msg;
-        return result;
-    }
-
-    bool success() const { return success_; }
-    const std::string& message() const { return message_; }
-
-private:
-    bool success_;
-    std::string message_;
-};
 
 // View metadata structure
 struct ViewMeta {
@@ -84,7 +60,7 @@ private:
     ExecutionResult executeCreateView(const sql::CreateViewStmt* stmt);
     ExecutionResult executeDropView(const sql::DropViewStmt* stmt);
 
-    // Phase 4: 多表JOIN执行
+    // Phase 4: 多表 JOIN 执行
     ExecutionResult executeJoin(const sql::SelectStmt* stmt);
 
     // LEFT JOIN 辅助函数
@@ -108,7 +84,7 @@ private:
     // WHERE 条件评估
     bool evaluateWhereCondition(const storage::Tuple& tuple, const sql::Expression* condition, const storage::Schema* schema);
 
-    // Phase 4: 多表WHERE条件评估
+    // Phase 4: 多表 WHERE 条件评估
     bool evaluateJoinWhereCondition(const std::vector<storage::Tuple>& tuples,
                                     const std::vector<storage::Schema*>& schemas,
                                     const sql::Expression* condition);

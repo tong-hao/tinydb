@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "sql/ast.h"
-#include "sql/parser.h"
+#include "sql/parser/ast.h"
+#include "sql/parser/parser.h"
 
 using namespace tinydb;
 using namespace tinydb::sql;

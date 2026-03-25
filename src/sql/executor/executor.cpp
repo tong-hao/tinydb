@@ -1,10 +1,10 @@
 #include "executor.h"
 #include "common/logger.h"
-#include "system_view_manager.h"
+#include "sql/stmt/system_view_manager.h"
 #include <sstream>
 #include <algorithm>
 #include <cctype>
-#include "sql/parser.h"
+#include "sql/parser/parser.h"
 
 namespace tinydb {
 namespace engine {

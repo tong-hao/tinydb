@@ -1,8 +1,8 @@
 #include "network/server.h"
 #include "network/connection.h"
 #include "network/protocol.h"
-#include "engine/executor.h"
-#include "engine/system_view_manager.h"
+#include "sql/executor/executor.h"
+#include "sql/stmt/system_view_manager.h"
 #include "storage/storage_engine.h"
 #include "common/logger.h"
 #include <iostream>

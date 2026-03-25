@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
-#include "sql/parser.h"
-#include "sql/ast.h"
-#include "engine/executor.h"
+#include "sql/parser/parser.h"
+#include "sql/parser/ast.h"
+#include "sql/executor/executor.h"
 #include "storage/storage_engine.h"
 
 using namespace tinydb;

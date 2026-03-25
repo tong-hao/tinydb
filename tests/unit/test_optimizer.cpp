@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "engine/optimizer.h"
+#include "sql/optimizer/optimizer.h"
 #include "storage/storage_engine.h"
 #include <filesystem>
 #include <memory>

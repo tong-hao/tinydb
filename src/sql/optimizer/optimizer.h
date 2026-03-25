@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sql/ast.h"
+#include "sql/parser/ast.h"
 #include "storage/statistics.h"
 #include "storage/index_manager.h"
 #include <memory>

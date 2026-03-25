@@ -6,7 +6,7 @@
 #include "storage/import_export_manager.h"
 #include "storage/replication_manager.h"
 #include "storage/transaction.h"
-#include "engine/system_view_manager.h"
+#include "sql/stmt/system_view_manager.h"
 #include <filesystem>
 #include <fstream>
 
