@@ -143,7 +143,7 @@ extern AST* g_ast;
 %type <create_view_stmt> create_view_stmt
 %type <drop_view_stmt> drop_view_stmt
 
-%type <expr> expr select_item opt_where
+%type <expr> expr select_item opt_where opt_having
 %type <expr> comparison_expr logical_expr aggregate_expr column_ref
 %type <expr_list> select_list value_list
 %type <str_list> column_list
@@ -307,7 +307,7 @@ statement:
 
 /* SELECT 语句 */
 select_stmt:
-    SELECT DISTINCT select_list FROM table_name opt_table_alias opt_join_clauses opt_where opt_group_by opt_order_by opt_limit {
+    SELECT DISTINCT select_list FROM table_name opt_table_alias opt_join_clauses opt_where opt_group_by opt_having opt_order_by opt_limit {
         $$ = new SelectStmt();
         $$->setDistinct(true);
         $$->setFromTable($5);
@@ -335,25 +335,29 @@ select_stmt:
             }
             delete $9;
         }
-        // ORDER BY
+        // HAVING
         if ($10) {
-            for (auto& item : *$10) {
-                $$->addOrderBy(std::move(item.first), item.second);
-            }
-            delete $10;
+            $$->setHavingCondition(std::unique_ptr<Expression>($10));
         }
-        // LIMIT and OFFSET
+        // ORDER BY
         if ($11) {
-            if ($11->first >= 0) {
-                $$->setLimit($11->first);
-            }
-            if ($11->second >= 0) {
-                $$->setOffset($11->second);
+            for (auto& item : *$11) {
+                $$->addOrderBy(std::move(item.first), item.second);
             }
             delete $11;
         }
+        // LIMIT and OFFSET
+        if ($12) {
+            if ($12->first >= 0) {
+                $$->setLimit($12->first);
+            }
+            if ($12->second >= 0) {
+                $$->setOffset($12->second);
+            }
+            delete $12;
+        }
     }
-    | SELECT DISTINCT STAR FROM table_name opt_table_alias opt_join_clauses opt_where opt_group_by opt_order_by opt_limit {
+    | SELECT DISTINCT STAR FROM table_name opt_table_alias opt_join_clauses opt_where opt_group_by opt_having opt_order_by opt_limit {
         $$ = new SelectStmt();
         $$->setDistinct(true);
         $$->addSelectItem(std::make_unique<ColumnRefExpr>("*"));
@@ -376,25 +380,29 @@ select_stmt:
             }
             delete $9;
         }
-        // ORDER BY
+        // HAVING
         if ($10) {
-            for (auto& item : *$10) {
-                $$->addOrderBy(std::move(item.first), item.second);
-            }
-            delete $10;
+            $$->setHavingCondition(std::unique_ptr<Expression>($10));
         }
-        // LIMIT and OFFSET
+        // ORDER BY
         if ($11) {
-            if ($11->first >= 0) {
-                $$->setLimit($11->first);
-            }
-            if ($11->second >= 0) {
-                $$->setOffset($11->second);
+            for (auto& item : *$11) {
+                $$->addOrderBy(std::move(item.first), item.second);
             }
             delete $11;
         }
+        // LIMIT and OFFSET
+        if ($12) {
+            if ($12->first >= 0) {
+                $$->setLimit($12->first);
+            }
+            if ($12->second >= 0) {
+                $$->setOffset($12->second);
+            }
+            delete $12;
+        }
     }
-    | SELECT select_list FROM table_name opt_table_alias opt_join_clauses opt_where opt_group_by opt_order_by opt_limit {
+    | SELECT select_list FROM table_name opt_table_alias opt_join_clauses opt_where opt_group_by opt_having opt_order_by opt_limit {
         $$ = new SelectStmt();
         $$->setFromTable($4);
         free($4);
@@ -421,25 +429,29 @@ select_stmt:
             }
             delete $8;
         }
-        // ORDER BY
+        // HAVING
         if ($9) {
-            for (auto& item : *$9) {
-                $$->addOrderBy(std::move(item.first), item.second);
-            }
-            delete $9;
+            $$->setHavingCondition(std::unique_ptr<Expression>($9));
         }
-        // LIMIT and OFFSET
+        // ORDER BY
         if ($10) {
-            if ($10->first >= 0) {
-                $$->setLimit($10->first);
-            }
-            if ($10->second >= 0) {
-                $$->setOffset($10->second);
+            for (auto& item : *$10) {
+                $$->addOrderBy(std::move(item.first), item.second);
             }
             delete $10;
         }
+        // LIMIT and OFFSET
+        if ($11) {
+            if ($11->first >= 0) {
+                $$->setLimit($11->first);
+            }
+            if ($11->second >= 0) {
+                $$->setOffset($11->second);
+            }
+            delete $11;
+        }
     }
-    | SELECT STAR FROM table_name opt_table_alias opt_join_clauses opt_where opt_group_by opt_order_by opt_limit {
+    | SELECT STAR FROM table_name opt_table_alias opt_join_clauses opt_where opt_group_by opt_having opt_order_by opt_limit {
         $$ = new SelectStmt();
         $$->addSelectItem(std::make_unique<ColumnRefExpr>("*"));
         $$->setFromTable($4);
@@ -452,6 +464,7 @@ select_stmt:
             delete $6;
         }
         if ($7) {
+        if ($7) {
             $$->setWhereCondition(std::unique_ptr<Expression>($7));
         }
         if ($8) {
@@ -461,23 +474,29 @@ select_stmt:
             }
             delete $8;
         }
-        // ORDER BY
+        // HAVING
         if ($9) {
-            for (auto& item : *$9) {
-                $$->addOrderBy(std::move(item.first), item.second);
-            }
-            delete $9;
+            $$->setHavingCondition(std::unique_ptr<Expression>($9));
         }
-        // LIMIT and OFFSET
+        // ORDER BY
         if ($10) {
-            if ($10->first >= 0) {
-                $$->setLimit($10->first);
-            }
-            if ($10->second >= 0) {
-                $$->setOffset($10->second);
+            for (auto& item : *$10) {
+                $$->addOrderBy(std::move(item.first), item.second);
             }
             delete $10;
         }
+        // LIMIT and OFFSET
+        if ($11) {
+            if ($11->first >= 0) {
+                $$->setLimit($11->first);
+            }
+            if ($11->second >= 0) {
+                $$->setOffset($11->second);
+            }
+            delete $11;
+        }
+    }
+    ;
     }
     ;
 
@@ -1069,6 +1088,12 @@ opt_group_by:
     | GROUP BY value_list { $$ = $3; }
     ;
 
+/* HAVING 子句 */
+opt_having:
+    /* empty */ { $$ = nullptr; }
+    | HAVING expr { $$ = $2; }
+    ;
+
 /* ORDER BY 子句 */
 opt_order_by:
     /* empty */ { $$ = nullptr; }
@@ -1132,32 +1157,32 @@ expr:
     ;
 
 comparison_expr:
-    column_ref EQ expr {
+    expr EQ expr {
         $$ = new ComparisonExpr(OpType::EQ,
             std::unique_ptr<Expression>($1),
             std::unique_ptr<Expression>($3));
     }
-    | column_ref NE expr {
+    | expr NE expr {
         $$ = new ComparisonExpr(OpType::NE,
             std::unique_ptr<Expression>($1),
             std::unique_ptr<Expression>($3));
     }
-    | column_ref LT expr {
+    | expr LT expr {
         $$ = new ComparisonExpr(OpType::LT,
             std::unique_ptr<Expression>($1),
             std::unique_ptr<Expression>($3));
     }
-    | column_ref GT expr {
+    | expr GT expr {
         $$ = new ComparisonExpr(OpType::GT,
             std::unique_ptr<Expression>($1),
             std::unique_ptr<Expression>($3));
     }
-    | column_ref LE expr {
+    | expr LE expr {
         $$ = new ComparisonExpr(OpType::LE,
             std::unique_ptr<Expression>($1),
             std::unique_ptr<Expression>($3));
     }
-    | column_ref GE expr {
+    | expr GE expr {
         $$ = new ComparisonExpr(OpType::GE,
             std::unique_ptr<Expression>($1),
             std::unique_ptr<Expression>($3));
@@ -1316,6 +1341,11 @@ table_name:
 
 column_name:
     IDENTIFIER { $$ = $1; }
+    | COUNT { $$ = strdup("COUNT"); }
+    | SUM { $$ = strdup("SUM"); }
+    | AVG { $$ = strdup("AVG"); }
+    | MAX { $$ = strdup("MAX"); }
+    | MIN { $$ = strdup("MIN"); }
     ;
 
 data_type:
