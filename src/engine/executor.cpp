@@ -1235,6 +1235,23 @@ ExecutionResult Executor::executeAlterTable(const sql::AlterTableStmt* stmt) {
             }
         }
 
+        case sql::AlterTableStmt::ActionType::ALTER_COLUMN_TYPE: {
+            // ALTER COLUMN TYPE - same as MODIFY COLUMN
+            storage::ColumnDef col_def(
+                stmt->columnName(),
+                parseDataType(stmt->columnType()),
+                parseTypeLength(stmt->columnType())
+            );
+
+            if (storage_engine_->modifyColumn(table_name, stmt->columnName(), col_def)) {
+                return ExecutionResult::ok("ALTER TABLE ALTER COLUMN " + stmt->columnName() +
+                                           " TYPE " + stmt->columnType() + " ON " + table_name);
+            } else {
+                return ExecutionResult::error("Failed to alter column type for " + stmt->columnName() +
+                                              " in table " + table_name);
+            }
+        }
+
         case sql::AlterTableStmt::ActionType::RENAME_TABLE: {
             // 重命名表
             std::string new_table_name = stmt->newTableName();

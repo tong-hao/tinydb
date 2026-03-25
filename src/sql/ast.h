@@ -711,7 +711,8 @@ public:
         DROP_COLUMN,
         MODIFY_COLUMN,
         RENAME_TABLE,
-        RENAME_COLUMN
+        RENAME_COLUMN,
+        ALTER_COLUMN_TYPE
     };
 
     void setTable(const std::string& table) { table_ = table; }
@@ -753,6 +754,9 @@ public:
                 break;
             case ActionType::RENAME_COLUMN:
                 result += "RENAME COLUMN " + column_name_ + " TO " + new_column_name_;
+                break;
+            case ActionType::ALTER_COLUMN_TYPE:
+                result += "ALTER COLUMN " + column_name_ + " TYPE " + column_type_;
                 break;
         }
         return result;

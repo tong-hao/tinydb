@@ -144,6 +144,32 @@ TEST_F(LexerTest, ParseAlterTableRenameTable) {
     EXPECT_EQ(alter_stmt->newTableName(), "customers");
 }
 
+TEST_F(LexerTest, ParseAlterTableAlterColumnType) {
+    auto ast = parseSQL("ALTER TABLE users ALTER COLUMN name TYPE VARCHAR(150)");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto alter_stmt = dynamic_cast<AlterTableStmt*>(ast->statement());
+    ASSERT_NE(alter_stmt, nullptr);
+    EXPECT_EQ(alter_stmt->table(), "users");
+    EXPECT_EQ(alter_stmt->action(), AlterTableStmt::ActionType::ALTER_COLUMN_TYPE);
+    EXPECT_EQ(alter_stmt->columnName(), "name");
+    EXPECT_EQ(alter_stmt->columnType(), "VARCHAR(150)");
+}
+
+TEST_F(LexerTest, ParseAlterTableRenameColumn) {
+    auto ast = parseSQL("ALTER TABLE users RENAME COLUMN age TO user_age");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto alter_stmt = dynamic_cast<AlterTableStmt*>(ast->statement());
+    ASSERT_NE(alter_stmt, nullptr);
+    EXPECT_EQ(alter_stmt->table(), "users");
+    EXPECT_EQ(alter_stmt->action(), AlterTableStmt::ActionType::RENAME_COLUMN);
+    EXPECT_EQ(alter_stmt->columnName(), "age");
+    EXPECT_EQ(alter_stmt->newColumnName(), "user_age");
+}
+
 // CREATE INDEX 测试
 TEST_F(LexerTest, ParseCreateIndex) {
     auto ast = parseSQL("CREATE INDEX idx_name ON users (name)");
@@ -324,5 +350,38 @@ TEST_F(LexerTest, ParseEmptyString) {
     auto insert_stmt = dynamic_cast<InsertStmt*>(ast->statement());
     ASSERT_NE(insert_stmt, nullptr);
     EXPECT_EQ(insert_stmt->table(), "large_values");
+}
+
+// Test CREATE TABLE with DEFAULT constraint
+TEST_F(LexerTest, ParseCreateTableWithDefault) {
+    auto ast = parseSQL("CREATE TABLE test (id INT PRIMARY KEY, age INT DEFAULT 0)");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto create_stmt = dynamic_cast<CreateTableStmt*>(ast->statement());
+    ASSERT_NE(create_stmt, nullptr);
+    EXPECT_EQ(create_stmt->table(), "test");
+}
+
+// Test CREATE TABLE with UNIQUE constraint
+TEST_F(LexerTest, ParseCreateTableWithUnique) {
+    auto ast = parseSQL("CREATE TABLE test (id INT PRIMARY KEY, username VARCHAR(50) UNIQUE NOT NULL)");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto create_stmt = dynamic_cast<CreateTableStmt*>(ast->statement());
+    ASSERT_NE(create_stmt, nullptr);
+    EXPECT_EQ(create_stmt->table(), "test");
+}
+
+// Test CREATE TABLE with CHECK constraint
+TEST_F(LexerTest, ParseCreateTableWithCheck) {
+    auto ast = parseSQL("CREATE TABLE test (id INT PRIMARY KEY, age INT CHECK (age >= 0))");
+    ASSERT_NE(ast, nullptr);
+    ASSERT_NE(ast->statement(), nullptr);
+
+    auto create_stmt = dynamic_cast<CreateTableStmt*>(ast->statement());
+    ASSERT_NE(create_stmt, nullptr);
+    EXPECT_EQ(create_stmt->table(), "test");
 }
 

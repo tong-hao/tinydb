@@ -95,10 +95,10 @@ SELECT * FROM tn_backup_list;
 
 ## 文档
 
-- [Feature.md](Feature.md) - 5阶段开发计划
-- [Phase3_Summary.md](Phase3_Summary.md) - 阶段三总结
-- [Phase4_Summary.md](Phase4_Summary.md) - 阶段四总结
-- [Phase5_Summary.md](Phase5_Summary.md) - 阶段五总结
+- [docs/Feature.md](Feature.md) - 5阶段开发计划
+- [docs/Phase3_Summary.md](Phase3_Summary.md) - 阶段三总结
+- [docs/Phase4_Summary.md](Phase4_Summary.md) - 阶段四总结
+- [docs/Phase5_Summary.md](Phase5_Summary.md) - 阶段五总结
 - [docs/design.md](docs/design.md) - 架构设计文档
 - [docs/protocol.md](docs/protocol.md) - 通信协议文档
 - [docs/storage_design.md](docs/storage_design.md) - 存储引擎设计

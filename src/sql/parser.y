@@ -99,10 +99,10 @@ extern AST* g_ast;
 %token JOIN INNER LEFT RIGHT OUTER CROSS NATURAL USING
 %token IN EXISTS BETWEEN LIKE IS
 %token CASE WHEN THEN ELSE END
-%token IF CAST DEFAULT
+%token IF CAST DEFAULT CHECK
 %token EXPLAIN ANALYZE DESCRIBE SHOW DATABASES TABLES
 %token BEGIN TRANSACTION COMMIT ROLLBACK
-%token ALTER ADD COLUMN MODIFY RENAME TO
+%token ALTER ADD COLUMN MODIFY RENAME TO TYPE
 
 /* 数据类型 */
 %token INT BIGINT SMALLINT TINYINT
@@ -142,7 +142,6 @@ extern AST* g_ast;
 %type <expr> comparison_expr logical_expr
 %type <expr_list> select_list value_list
 %type <str_list> column_list
-%type <col_def_list> column_def_list
 %type <column_def_list_full> column_def_list_full
 %type <column_def> column_def
 %type <insert_values_list> insert_values_list
@@ -156,7 +155,6 @@ extern AST* g_ast;
 %type <expr_list> opt_group_by
 
 %destructor { free($$); } <str>
-%destructor { delete $$; } <col_def_list>
 %destructor { delete $$; } <column_def_list_full>
 %destructor { delete $$; } <insert_values_list>
 %destructor { delete $$; } <order_by_list>
@@ -300,7 +298,80 @@ statement:
 
 /* SELECT 语句 */
 select_stmt:
-    SELECT select_list FROM table_name opt_where opt_group_by opt_order_by opt_limit {
+    SELECT DISTINCT select_list FROM table_name opt_where opt_group_by opt_order_by opt_limit {
+        $$ = new SelectStmt();
+        $$->setDistinct(true);
+        $$->setFromTable($5);
+        free($5);
+        if ($3) {
+            for (auto& expr : *$3) {
+                $$->addSelectItem(std::move(expr));
+            }
+            delete $3;
+        }
+        if ($6) {
+            $$->setWhereCondition(std::unique_ptr<Expression>($6));
+        }
+        if ($7) {
+            // GROUP BY
+            for (auto& expr : *$7) {
+                $$->addGroupByItem(std::move(expr));
+            }
+            delete $7;
+        }
+        // ORDER BY
+        if ($8) {
+            for (auto& item : *$8) {
+                $$->addOrderBy(std::move(item.first), item.second);
+            }
+            delete $8;
+        }
+        // LIMIT and OFFSET
+        if ($9) {
+            if ($9->first >= 0) {
+                $$->setLimit($9->first);
+            }
+            if ($9->second >= 0) {
+                $$->setOffset($9->second);
+            }
+            delete $9;
+        }
+    }
+    | SELECT DISTINCT STAR FROM table_name opt_where opt_group_by opt_order_by opt_limit {
+        $$ = new SelectStmt();
+        $$->setDistinct(true);
+        $$->addSelectItem(std::make_unique<ColumnRefExpr>("*"));
+        $$->setFromTable($5);
+        free($5);
+        if ($6) {
+            $$->setWhereCondition(std::unique_ptr<Expression>($6));
+        }
+        if ($7) {
+            // GROUP BY
+            for (auto& expr : *$7) {
+                $$->addGroupByItem(std::move(expr));
+            }
+            delete $7;
+        }
+        // ORDER BY
+        if ($8) {
+            for (auto& item : *$8) {
+                $$->addOrderBy(std::move(item.first), item.second);
+            }
+            delete $8;
+        }
+        // LIMIT and OFFSET
+        if ($9) {
+            if ($9->first >= 0) {
+                $$->setLimit($9->first);
+            }
+            if ($9->second >= 0) {
+                $$->setOffset($9->second);
+            }
+            delete $9;
+        }
+    }
+    | SELECT select_list FROM table_name opt_where opt_group_by opt_order_by opt_limit {
         $$ = new SelectStmt();
         $$->setFromTable($4);
         free($4);
@@ -597,6 +668,52 @@ column_def:
         free($1);
         free($2);
     }
+    | column_name data_type NOT NULLX PRIMARY KEY {
+        $$ = new CreateTableStmt::ColumnDef{$1, $2, true, true, false, nullptr, ""};
+        free($1);
+        free($2);
+    }
+    | column_name data_type NOT NULLX UNIQUE {
+        $$ = new CreateTableStmt::ColumnDef{$1, $2, false, true, true, nullptr, ""};
+        free($1);
+        free($2);
+    }
+    | column_name data_type UNIQUE {
+        $$ = new CreateTableStmt::ColumnDef{$1, $2, false, false, true, nullptr, ""};
+        free($1);
+        free($2);
+    }
+    | column_name data_type UNIQUE NOT NULLX {
+        $$ = new CreateTableStmt::ColumnDef{$1, $2, false, true, true, nullptr, ""};
+        free($1);
+        free($2);
+    }
+    | column_name data_type DEFAULT NUMBER {
+        $$ = new CreateTableStmt::ColumnDef{$1, $2, false, false, false, std::make_unique<LiteralExpr>($4), ""};
+        free($1);
+        free($2);
+    }
+    | column_name data_type DEFAULT STRING_LITERAL {
+        $$ = new CreateTableStmt::ColumnDef{$1, $2, false, false, false, std::make_unique<LiteralExpr>($4), ""};
+        free($1);
+        free($2);
+    }
+    | column_name data_type DEFAULT TRUE {
+        $$ = new CreateTableStmt::ColumnDef{$1, $2, false, false, false, std::make_unique<LiteralExpr>("TRUE"), ""};
+        free($1);
+        free($2);
+    }
+    | column_name data_type DEFAULT FALSE {
+        $$ = new CreateTableStmt::ColumnDef{$1, $2, false, false, false, std::make_unique<LiteralExpr>("FALSE"), ""};
+        free($1);
+        free($2);
+    }
+    | column_name data_type CHECK LPAREN expr RPAREN {
+        $$ = new CreateTableStmt::ColumnDef{$1, $2, false, false, false, nullptr, $5->toString()};
+        free($1);
+        free($2);
+        delete $5;
+    }
     ;
 
 /* DROP TABLE 语句 */
@@ -680,6 +797,52 @@ alter_table_stmt:
         $$->setNewTableName($5);
         free($3);
         free($5);
+    }
+    | ALTER TABLE table_name ALTER column_name TYPE data_type {
+        $$ = new AlterTableStmt();
+        $$->setTable($3);
+        $$->setAction(AlterTableStmt::ActionType::ALTER_COLUMN_TYPE);
+        $$->setColumnDef($5, $7);
+        free($3);
+        free($5);
+        free($7);
+    }
+    | ALTER TABLE table_name ALTER COLUMN column_name TYPE data_type {
+        $$ = new AlterTableStmt();
+        $$->setTable($3);
+        $$->setAction(AlterTableStmt::ActionType::ALTER_COLUMN_TYPE);
+        $$->setColumnDef($6, $8);
+        free($3);
+        free($6);
+        free($8);
+    }
+    | ALTER TABLE table_name ALTER column_name data_type {
+        $$ = new AlterTableStmt();
+        $$->setTable($3);
+        $$->setAction(AlterTableStmt::ActionType::ALTER_COLUMN_TYPE);
+        $$->setColumnDef($5, $6);
+        free($3);
+        free($5);
+        free($6);
+    }
+    | ALTER TABLE table_name ALTER COLUMN column_name data_type {
+        $$ = new AlterTableStmt();
+        $$->setTable($3);
+        $$->setAction(AlterTableStmt::ActionType::ALTER_COLUMN_TYPE);
+        $$->setColumnDef($6, $7);
+        free($3);
+        free($6);
+        free($7);
+    }
+    | ALTER TABLE table_name RENAME COLUMN column_name TO column_name {
+        $$ = new AlterTableStmt();
+        $$->setTable($3);
+        $$->setAction(AlterTableStmt::ActionType::RENAME_COLUMN);
+        $$->setColumnName($6);
+        $$->setNewColumnName($8);
+        free($3);
+        free($6);
+        free($8);
     }
     ;
 
@@ -944,6 +1107,12 @@ comparison_expr:
     }
     | LPAREN expr RPAREN {
         $$ = $2;
+    }
+    | MINUS expr %prec NOT {
+        // Unary minus for negative numbers
+        $$ = new BinaryOpExpr(OpType::SUB,
+            std::make_unique<LiteralExpr>("0"),
+            std::unique_ptr<Expression>($2));
     }
     ;
 

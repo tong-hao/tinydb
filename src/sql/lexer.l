@@ -99,6 +99,7 @@ NEWLINE     \n
 "IF"            { return IF; }
 "CAST"          { return CAST; }
 "DEFAULT"       { return DEFAULT; }
+"CHECK"         { return CHECK; }
 "EXPLAIN"       { return EXPLAIN; }
 "DESCRIBE"      { return DESCRIBE; }
 "SHOW"          { return SHOW; }
@@ -118,6 +119,7 @@ NEWLINE     \n
 "MODIFY"        { return MODIFY; }
 "RENAME"        { return RENAME; }
 "TO"            { return TO; }
+"TYPE"          { return TYPE; }
 
  /* ANALYZE */
 "ANALYZE"       { return ANALYZE; }
