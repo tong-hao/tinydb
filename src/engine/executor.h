@@ -87,6 +87,20 @@ private:
     // Phase 4: 多表JOIN执行
     ExecutionResult executeJoin(const sql::SelectStmt* stmt);
 
+    // LEFT JOIN 辅助函数
+    void processJoinClause(const sql::SelectStmt* stmt,
+                          const storage::Tuple& current_tuple,
+                          storage::Schema* current_schema,
+                          const std::vector<std::unique_ptr<sql::JoinTable>>& join_tables,
+                          size_t join_index,
+                          std::vector<storage::Tuple> accumulated_tuples,
+                          std::vector<storage::Schema*>& schemas,
+                          std::vector<std::vector<storage::Tuple>>& results,
+                          int& row_count);
+    ExecutionResult executeSimpleJoin(const sql::SelectStmt* stmt,
+                                      const std::vector<std::string>& tables,
+                                      std::string& result);
+
     // 类型转换辅助函数
     storage::DataType parseDataType(const std::string& type_str);
     uint32_t parseTypeLength(const std::string& type_str);
