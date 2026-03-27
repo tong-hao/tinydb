@@ -1,3 +1,4 @@
+#include "executor.h"
 #include "common/logger.h"
 #include <algorithm>
 #include <cctype>
@@ -5,7 +6,7 @@
 namespace tinydb {
 namespace engine {
 
-// 评估 WHERE 条件
+// Evaluate WHERE condition
 bool Executor::evaluateWhereCondition(const storage::Tuple& tuple, const sql::Expression* condition, const storage::Schema* schema) {
     if (!condition) return true;
 
@@ -88,14 +89,14 @@ bool Executor::evaluateWhereCondition(const storage::Tuple& tuple, const sql::Ex
 
     // 处理逻辑表达式
     if (auto logic_expr = dynamic_cast<const sql::LogicalExpr*>(condition)) {
-        auto left_result = evaluateWhereCondition(tuple, logic_expr->left(), schema);
+        auto left_result = Executor::evaluateWhereCondition(tuple, logic_expr->left(), schema);
 
         if (logic_expr->op() == sql::OpType::AND) {
             if (!left_result) return false;
-            return evaluateWhereCondition(tuple, logic_expr->right(), schema);
+            return Executor::evaluateWhereCondition(tuple, logic_expr->right(), schema);
         } else if (logic_expr->op() == sql::OpType::OR) {
             if (left_result) return true;
-            return evaluateWhereCondition(tuple, logic_expr->right(), schema);
+            return Executor::evaluateWhereCondition(tuple, logic_expr->right(), schema);
         } else if (logic_expr->op() == sql::OpType::NOT) {
             return !left_result;
         }
@@ -209,7 +210,7 @@ bool Executor::evaluateWhereCondition(const storage::Tuple& tuple, const sql::Ex
         }
 
         // 简单的 LIKE 模式匹配（支持 % 和 _）
-        bool matches = matchLikePattern(left_val, pattern);
+        bool matches = Executor::matchLikePattern(left_val, pattern);
         return like_expr->isNot() ? !matches : matches;
     }
 
@@ -462,27 +463,31 @@ storage::Field Executor::evaluateExpression(const sql::Expression* expr, const s
     return storage::Field();
 }
 
-// 锁管理辅助方法（阶段三新增）
-bool Executor::acquireTableLock(const std::string& table_name, storage::LockType lock_type) {
-    if (!storage_engine_) {
+// Lock management helper functions
+bool Executor::acquireTableLock(storage::StorageEngine* storage_engine,
+                                storage::Transaction* txn,
+                                const std::string& table_name, 
+                                storage::LockType lock_type) {
+    if (!storage_engine) {
         return false;
     }
 
-    // 如果没有活跃事务，无法获取锁
-    if (!current_txn_) {
+    if (!txn) {
         LOG_ERROR("Cannot acquire lock without active transaction");
         return false;
     }
 
-    return storage_engine_->lockTable(current_txn_, table_name, lock_type);
+    return storage_engine->lockTable(txn, table_name, lock_type);
 }
 
-bool Executor::releaseTableLock(const std::string& table_name) {
-    if (!storage_engine_ || !current_txn_) {
+bool Executor::releaseTableLock(storage::StorageEngine* storage_engine,
+                                storage::Transaction* txn,
+                                const std::string& table_name) {
+    if (!storage_engine || !txn) {
         return false;
     }
 
-    return storage_engine_->unlockTable(current_txn_, table_name);
+    return storage_engine->unlockTable(txn, table_name);
 }
 
 // LIKE 模式匹配辅助函数

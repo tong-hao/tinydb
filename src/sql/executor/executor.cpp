@@ -45,12 +45,12 @@ ExecutionResult Executor::execute(const sql::SQLParseTree& ast) {
         return e.execute(select_stmt);
     } else if (auto insert_stmt = dynamic_cast<const sql::InsertStmt*>(stmt)) {
         InsertExecutor e(storage_engine_);
-        return e.execute(select_stmt);
+        return e.execute(insert_stmt);
     }  else if (auto update_stmt = dynamic_cast<const sql::UpdateStmt*>(stmt)) {
         UpdateExecutor e(storage_engine_);
-        return e.execute(select_stmt);
+        return e.execute(update_stmt);
     } else if (auto delete_stmt = dynamic_cast<const sql::DeleteStmt*>(stmt)) {
-        DeleteExecutor e(storage_engine_);
+        DeleteExecutor e(storage_engine_, current_txn_);
         return e.execute(delete_stmt);
     } else if (auto create_stmt = dynamic_cast<const sql::CreateTableStmt*>(stmt)) {
         CreateTableExecutor e(storage_engine_);

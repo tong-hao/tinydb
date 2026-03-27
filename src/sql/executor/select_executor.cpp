@@ -6,7 +6,15 @@
 namespace tinydb {
 namespace engine {
 
-ExecutionResult SelectSelectExecutor::execute(const sql::SelectStmt* stmt) {
+SelectExecutor::SelectExecutor(storage::StorageEngine* storage_engine)
+    : storage_engine_(storage_engine) {
+    LOG_INFO("SelectExecutor initialized");
+}
+
+SelectExecutor::~SelectExecutor() {
+}
+
+ExecutionResult SelectExecutor::execute(const sql::SelectStmt* stmt) {
     if (!storage_engine_) {
         return ExecutionResult::ok("SELECT executed (simulated - no storage engine)");
     }
@@ -18,11 +26,6 @@ ExecutionResult SelectSelectExecutor::execute(const sql::SelectStmt* stmt) {
         return executeJoin(stmt);
     }
 
-    // Phase 4: 使用优化器生成执行计划
-    if (stmt && !table_name.empty() && optimizer_) {
-        ExecutionPlan plan = optimizer_->optimize(stmt);
-        // 可以根据执行计划选择扫描方式
-    }
 
     // Phase 4: 检查是否可以使用索引扫描
     if (stmt && stmt->whereCondition() && !table_name.empty()) {
@@ -60,7 +63,7 @@ ExecutionResult SelectSelectExecutor::execute(const sql::SelectStmt* stmt) {
                         int count = 0;
                         for (const auto& tid : tids) {
                             auto tuple = storage_engine_->get(table_name, tid);
-                            result += formatTuple(tuple, stmt->selectList(), &table_meta->schema) + "\n";
+                            result += Executor::formatTuple(tuple, stmt->selectList(), &table_meta->schema) + "\n";
                             count++;
                         }
 
@@ -204,17 +207,17 @@ ExecutionResult SelectSelectExecutor::execute(const sql::SelectStmt* stmt) {
                 auto tuple = iter.getNext();
 
                 // Apply view's WHERE condition
-                if (view_where && !evaluateWhereCondition(tuple, view_where, &table_meta->schema)) {
+                if (view_where && !Executor::evaluateWhereCondition(tuple, view_where, &table_meta->schema)) {
                     continue;
                 }
 
                 // Apply current query's WHERE condition
-                if (current_where && !evaluateWhereCondition(tuple, current_where, &table_meta->schema)) {
+                if (current_where && !Executor::evaluateWhereCondition(tuple, current_where, &table_meta->schema)) {
                     continue;
                 }
 
                 // For view, use the view's select list
-                result += formatTuple(tuple, view_select->selectList(), &table_meta->schema) + "\n";
+                result += Executor::formatTuple(tuple, view_select->selectList(), &table_meta->schema) + "\n";
                 count++;
             }
 
@@ -246,13 +249,13 @@ ExecutionResult SelectSelectExecutor::execute(const sql::SelectStmt* stmt) {
             auto tuple = iter.getNext();
 
             // 应用 WHERE 条件过滤
-            if (where_condition && !evaluateWhereCondition(tuple, where_condition, &table_meta->schema)) {
+            if (where_condition && !Executor::evaluateWhereCondition(tuple, where_condition, &table_meta->schema)) {
                 continue;
             }
 
             // 格式化输出，支持选择特定列
             if (stmt) {
-                result += formatTuple(tuple, stmt->selectList(), &table_meta->schema) + "\n";
+                result += Executor::formatTuple(tuple, stmt->selectList(), &table_meta->schema) + "\n";
             } else {
                 result += tuple.toString() + "\n";
             }
@@ -287,14 +290,6 @@ ExecutionResult SelectExecutor::executeJoin(const sql::SelectStmt* stmt) {
         }
     }
 
-    // 使用优化器生成执行计划
-    if (!optimizer_) {
-        optimizer_ = std::make_unique<QueryOptimizer>(
-            storage_engine_->getStatisticsManager(),
-            storage_engine_->getIndexManager());
-    }
-
-    ExecutionPlan plan = optimizer_->optimize(stmt);
 
     // 执行Nested Loop Join（支持 INNER 和 LEFT JOIN）
     std::string result = "JOIN Result:\n";
@@ -334,7 +329,7 @@ ExecutionResult SelectExecutor::executeJoin(const sql::SelectStmt* stmt) {
 
     // 格式化输出所有结果
     for (const auto& tuples : all_results) {
-        result += formatJoinTuple(tuples, all_schemas, stmt->selectList()) + "\n";
+        result += Executor::formatJoinTuple(tuples, all_schemas, stmt->selectList()) + "\n";
     }
 
     result += "--------------------\n";
@@ -356,7 +351,7 @@ void SelectExecutor::processJoinClause(const sql::SelectStmt* stmt,
     if (join_index >= join_tables.size()) {
         // 所有JOIN处理完成，检查WHERE条件
         if (stmt->whereCondition()) {
-            if (!evaluateJoinWhereCondition(accumulated_tuples, schemas, stmt->whereCondition())) {
+            if (!Executor::evaluateJoinWhereCondition(accumulated_tuples, schemas, stmt->whereCondition())) {
                 return;
             }
         }
@@ -390,7 +385,7 @@ void SelectExecutor::processJoinClause(const sql::SelectStmt* stmt,
 
         bool condition_passed = true;
         if (join_condition) {
-            condition_passed = evaluateJoinWhereCondition(test_tuples, current_schemas, join_condition);
+            condition_passed = Executor::evaluateJoinWhereCondition(test_tuples, current_schemas, join_condition);
         }
 
         if (condition_passed) {
@@ -405,7 +400,7 @@ void SelectExecutor::processJoinClause(const sql::SelectStmt* stmt,
             } else {
                 // 检查WHERE条件
                 if (stmt->whereCondition()) {
-                    if (!evaluateJoinWhereCondition(test_tuples, current_schemas, stmt->whereCondition())) {
+                    if (!Executor::evaluateJoinWhereCondition(test_tuples, current_schemas, stmt->whereCondition())) {
                         continue;
                     }
                 }
@@ -435,7 +430,7 @@ void SelectExecutor::processJoinClause(const sql::SelectStmt* stmt,
         } else {
             // 检查WHERE条件（注意：LEFT JOIN 的 WHERE 可能排除 NULL 行）
             if (stmt->whereCondition()) {
-                if (!evaluateJoinWhereCondition(test_tuples, current_schemas, stmt->whereCondition())) {
+                if (!Executor::evaluateJoinWhereCondition(test_tuples, current_schemas, stmt->whereCondition())) {
                     return;
                 }
             }
@@ -466,12 +461,12 @@ ExecutionResult SelectExecutor::executeSimpleJoin(const sql::SelectStmt* stmt,
             std::vector<storage::Schema*> schemas = {&left_table->schema, &right_table->schema};
 
             if (stmt->whereCondition()) {
-                if (!evaluateJoinWhereCondition(tuples, schemas, stmt->whereCondition())) {
+                if (!Executor::evaluateJoinWhereCondition(tuples, schemas, stmt->whereCondition())) {
                     continue;
                 }
             }
 
-            result += formatJoinTuple(tuples, schemas, stmt->selectList()) + "\n";
+            result += Executor::formatJoinTuple(tuples, schemas, stmt->selectList()) + "\n";
             row_count++;
         }
     }

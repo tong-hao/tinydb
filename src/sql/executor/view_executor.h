@@ -2,6 +2,9 @@
 
 #include "execution_result.h"
 #include "storage/storage_engine.h"
+#include "executor.h"
+#include "sql/stmt/create_view_stmt.h"
+#include "sql/stmt/drop_view_stmt.h"
 
 namespace tinydb {
 namespace engine {

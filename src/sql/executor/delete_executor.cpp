@@ -1,5 +1,6 @@
 #include "common/logger.h"
 #include "delete_executor.h"
+#include "executor.h"
 
 namespace tinydb {
 namespace engine {
@@ -36,7 +37,7 @@ ExecutionResult DeleteExecutor::execute(const sql::DeleteStmt* stmt) {
         }
 
         // Acquire exclusive lock (write lock)
-        if (!acquireTableLock(table_name, storage::LockType::EXCLUSIVE)) {
+        if (!Executor::acquireTableLock(storage_engine_, txn, table_name, storage::LockType::EXCLUSIVE)) {
             if (auto_txn) {
                 storage_engine_->abortTransaction(txn);
                 current_txn_ = nullptr;
@@ -56,7 +57,7 @@ ExecutionResult DeleteExecutor::execute(const sql::DeleteStmt* stmt) {
             storage::TID tid = iter.getCurrentTID();
 
             // Apply WHERE condition filter
-            if (where_condition && !evaluateWhereCondition(tuple, where_condition, &table_meta->schema)) {
+            if (where_condition && !Executor::evaluateWhereCondition(tuple, where_condition, &table_meta->schema)) {
                 continue;
             }
 
@@ -72,7 +73,7 @@ ExecutionResult DeleteExecutor::execute(const sql::DeleteStmt* stmt) {
         }
 
         // Release lock
-        releaseTableLock(table_name);
+        Executor::releaseTableLock(storage_engine_, txn, table_name);
 
         // Auto-commit if no explicit transaction
         if (auto_txn) {

@@ -1,4 +1,5 @@
 #include "insert_executor.h"
+#include "executor.h"
 #include "common/logger.h"
 
 namespace tinydb {
@@ -9,7 +10,7 @@ ExecutionResult InsertExecutor::execute(const sql::InsertStmt* stmt) {
         return ExecutionResult::ok("INSERT executed (simulated - no storage engine)");
     }
 
-    // Phase 阶段：实际插入数据
+    // Phase: actual data insertion
     if (stmt) {
         std::string table_name = stmt->table();
 
@@ -22,20 +23,18 @@ ExecutionResult InsertExecutor::execute(const sql::InsertStmt* stmt) {
             return ExecutionResult::error("Failed to get table metadata: " + table_name);
         }
 
-        // 获取或开始事务
-        storage::Transaction* txn = current_txn_;
+        // Get or start transaction
+        storage::Transaction* txn = nullptr;
         bool auto_txn = false;
         if (!txn) {
             txn = storage_engine_->beginTransaction();
-            current_txn_ = txn;  // 设置当前事务
             auto_txn = true;
         }
 
-        // 获取排他锁（写锁）
-        if (!acquireTableLock(table_name, storage::LockType::EXCLUSIVE)) {
+        // Acquire exclusive lock (write lock)
+        if (!Executor::acquireTableLock(storage_engine_, txn, table_name, storage::LockType::EXCLUSIVE)) {
             if (auto_txn) {
                 storage_engine_->abortTransaction(txn);
-                current_txn_ = nullptr;
             }
             return ExecutionResult::error("Failed to acquire lock on table: " + table_name);
         }
@@ -60,10 +59,10 @@ ExecutionResult InsertExecutor::execute(const sql::InsertStmt* stmt) {
                         if (i < columns.size()) {
                             col_idx = table_meta->schema.findColumnIndex(columns[i]);
                             if (col_idx == static_cast<size_t>(-1)) {
-                                releaseTableLock(table_name);
+                                Executor::releaseTableLock(storage_engine_, txn, table_name);
                                 if (auto_txn) {
                                     storage_engine_->abortTransaction(txn);
-                                    current_txn_ = nullptr;
+                                    
                                 }
                                 return ExecutionResult::error("Unknown column: " + columns[i]);
                             }
@@ -118,10 +117,10 @@ ExecutionResult InsertExecutor::execute(const sql::InsertStmt* stmt) {
                 auto tid = storage_engine_->insert(table_name, tuple);
 
                 if (!tid.isValid()) {
-                    releaseTableLock(table_name);
+                    Executor::releaseTableLock(storage_engine_, txn, table_name);
                     if (auto_txn) {
                         storage_engine_->abortTransaction(txn);
-                        current_txn_ = nullptr;
+                        
                     }
                     return ExecutionResult::error("Failed to insert row");
                 }
@@ -148,10 +147,10 @@ ExecutionResult InsertExecutor::execute(const sql::InsertStmt* stmt) {
                     if (i < columns.size()) {
                         col_idx = table_meta->schema.findColumnIndex(columns[i]);
                         if (col_idx == static_cast<size_t>(-1)) {
-                            releaseTableLock(table_name);
+                            Executor::releaseTableLock(storage_engine_, txn, table_name);
                             if (auto_txn) {
                                 storage_engine_->abortTransaction(txn);
-                                current_txn_ = nullptr;
+                                
                             }
                             return ExecutionResult::error("Unknown column: " + columns[i]);
                         }
@@ -205,12 +204,12 @@ ExecutionResult InsertExecutor::execute(const sql::InsertStmt* stmt) {
             auto tid = storage_engine_->insert(table_name, tuple);
 
             // 释放锁
-            releaseTableLock(table_name);
+            Executor::releaseTableLock(storage_engine_, txn, table_name);
 
             if (!tid.isValid()) {
                 if (auto_txn) {
                     storage_engine_->abortTransaction(txn);
-                    current_txn_ = nullptr;
+                    
                 }
                 return ExecutionResult::error("Failed to insert row");
             }
@@ -224,15 +223,15 @@ ExecutionResult InsertExecutor::execute(const sql::InsertStmt* stmt) {
         }
 
         // 释放锁
-        releaseTableLock(table_name);
+        Executor::releaseTableLock(storage_engine_, txn, table_name);
 
         // 如果没有显式事务，自动提交
         if (auto_txn) {
             if (!storage_engine_->commitTransaction(txn)) {
-                current_txn_ = nullptr;
+                
                 return ExecutionResult::error("Failed to commit transaction");
             }
-            current_txn_ = nullptr;
+            
         }
 
         return ExecutionResult::ok("INSERT " + std::to_string(inserted_count));

@@ -1,5 +1,6 @@
 #include "common/logger.h"
 #include "update_executor.h"
+#include "executor.h"
 
 namespace tinydb {
 namespace engine {
@@ -23,19 +24,19 @@ ExecutionResult UpdateExecutor::execute(const sql::UpdateStmt* stmt) {
         }
 
         // 获取或开始事务
-        storage::Transaction* txn = current_txn_;
+        storage::Transaction* txn = nullptr;
         bool auto_txn = false;
         if (!txn) {
             txn = storage_engine_->beginTransaction();
-            current_txn_ = txn;
+            
             auto_txn = true;
         }
 
         // 获取排他锁（写锁）
-        if (!acquireTableLock(table_name, storage::LockType::EXCLUSIVE)) {
+        if (!Executor::acquireTableLock(storage_engine_, txn, table_name, storage::LockType::EXCLUSIVE)) {
             if (auto_txn) {
                 storage_engine_->abortTransaction(txn);
-                current_txn_ = nullptr;
+                
             }
             return ExecutionResult::error("Failed to acquire lock on table: " + table_name);
         }
@@ -62,7 +63,7 @@ ExecutionResult UpdateExecutor::execute(const sql::UpdateStmt* stmt) {
             storage::TID tid = iter.getCurrentTID();
 
             // 应用 WHERE 条件过滤
-            if (where_condition && !evaluateWhereCondition(tuple, where_condition, &table_meta->schema)) {
+            if (where_condition && !Executor::evaluateWhereCondition(tuple, where_condition, &table_meta->schema)) {
                 continue;
             }
 
@@ -81,16 +82,16 @@ ExecutionResult UpdateExecutor::execute(const sql::UpdateStmt* stmt) {
 
                 int col_idx = table_meta->schema.findColumnIndex(col_name);
                 if (col_idx < 0) {
-                    releaseTableLock(table_name);
+                    Executor::releaseTableLock(storage_engine_, txn, table_name);
                     if (auto_txn) {
                         storage_engine_->abortTransaction(txn);
-                        current_txn_ = nullptr;
+                        
                     }
                     return ExecutionResult::error("Unknown column: " + col_name);
                 }
 
                 // 使用表达式求值来支持算术运算和其他复杂表达式
-                storage::Field field = evaluateExpression(value_expr, tuple, &table_meta->schema);
+                storage::Field field = Executor::evaluateExpression(value_expr, tuple, &table_meta->schema);
 
                 // Debug output
                 LOG_INFO("Updating column " << col_name << " at index " << col_idx
@@ -107,10 +108,10 @@ ExecutionResult UpdateExecutor::execute(const sql::UpdateStmt* stmt) {
         for (auto& record : records_to_update) {
             // 使用存储引擎的 update 方法
             if (!storage_engine_->update(table_name, record.tid, record.updated_tuple)) {
-                releaseTableLock(table_name);
+                Executor::releaseTableLock(storage_engine_, txn, table_name);
                 if (auto_txn) {
                     storage_engine_->abortTransaction(txn);
-                    current_txn_ = nullptr;
+                    
                 }
                 return ExecutionResult::error("Failed to update row");
             }
@@ -119,15 +120,15 @@ ExecutionResult UpdateExecutor::execute(const sql::UpdateStmt* stmt) {
         }
 
         // 释放锁
-        releaseTableLock(table_name);
+        Executor::releaseTableLock(storage_engine_, txn, table_name);
 
         // 如果没有显式事务，自动提交
         if (auto_txn) {
             if (!storage_engine_->commitTransaction(txn)) {
-                current_txn_ = nullptr;
+                
                 return ExecutionResult::error("Failed to commit update");
             }
-            current_txn_ = nullptr;
+            
         }
 
         return ExecutionResult::ok("UPDATE " + std::to_string(update_count) + " row(s) in table " + table_name);

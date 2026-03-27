@@ -4,6 +4,7 @@
 #include "sql/optimizer/optimizer.h"
 #include <memory>
 #include "storage/storage_engine.h"
+#include "sql/stmt/update_stmt.h"
 
 namespace tinydb {
 namespace engine {
@@ -14,7 +15,7 @@ public:
 
     virtual ~UpdateExecutor() {};
 
-    ExecutionResult execute(const sql::SelectStmt* stmt);
+    ExecutionResult execute(const sql::UpdateStmt* stmt);
 
 private:
     storage::StorageEngine* storage_engine_;

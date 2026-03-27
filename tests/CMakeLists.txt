@@ -6,7 +6,7 @@ add_executable(test_lexer
 )
 
 target_link_libraries(test_lexer
-    sql
+    sql_parser
     GTest::gtest_main
 )
 
@@ -59,8 +59,8 @@ add_executable(test_update_delete
 )
 
 target_link_libraries(test_update_delete
-    engine
-    sql
+    sql_engine
+    sql_parser
     storage
     GTest::gtest_main
 )
@@ -71,8 +71,8 @@ add_executable(test_alter_table
 )
 
 target_link_libraries(test_alter_table
-    engine
-    sql
+    sql_engine
+    sql_parser
     storage
     GTest::gtest_main
 )
@@ -83,8 +83,8 @@ add_executable(test_create_table_types
 )
 
 target_link_libraries(test_create_table_types
-    engine
-    sql
+    sql_engine
+    sql_parser
     storage
     GTest::gtest_main
 )
@@ -95,7 +95,7 @@ add_executable(test_expression
 )
 
 target_link_libraries(test_expression
-    sql
+sql_parser
     storage
     GTest::gtest_main
 )
@@ -106,8 +106,8 @@ add_executable(test_executor
 )
 
 target_link_libraries(test_executor
-    engine
-    sql
+    sql_engine
+    sql_parser
     storage
     GTest::gtest_main
 )
@@ -158,7 +158,7 @@ add_executable(test_optimizer
 )
 
 target_link_libraries(test_optimizer
-    engine
+    sql_engine
     storage
     GTest::gtest_main
 )
@@ -169,7 +169,7 @@ add_executable(test_join
 )
 
 target_link_libraries(test_join
-    engine
+    sql_engine
     storage
     GTest::gtest_main
 )
@@ -180,7 +180,7 @@ add_executable(test_phase4_integration
 )
 
 target_link_libraries(test_phase4_integration
-    engine
+    sql_engine
     storage
     GTest::gtest_main
 )
@@ -191,7 +191,7 @@ add_executable(test_phase5_integration
 )
 
 target_link_libraries(test_phase5_integration
-    engine
+    sql_engine
     storage
     GTest::gtest_main
 )
@@ -208,7 +208,7 @@ target_include_directories(test_basic PRIVATE
 target_link_libraries(test_basic
     tinydb_client
     network
-    engine
+    sql_engine
     GTest::gtest_main
 )
 
