@@ -1180,6 +1180,10 @@ expr:
     comparison_expr { $$ = $1; }
     | logical_expr { $$ = $1; }
     | aggregate_expr { $$ = $1; }
+    | LPAREN select_stmt RPAREN {
+        // Scalar subquery (e.g., SELECT AVG(salary) FROM employees)
+        $$ = new SubqueryExpr(std::unique_ptr<SelectStmt>($2));
+    }
     ;
 
 comparison_expr:
@@ -1300,6 +1304,9 @@ logical_expr:
         $$ = new InExpr(std::unique_ptr<Expression>($1), std::move(*values), false);
         delete values;
     }
+    | expr IN LPAREN select_stmt RPAREN {
+        $$ = new InSubqueryExpr(std::unique_ptr<Expression>($1), std::unique_ptr<SelectStmt>($4), false);
+    }
     | expr NOT IN LPAREN value_list RPAREN {
         auto values = new std::vector<std::unique_ptr<Expression>>();
         for (auto& v : *$5) {
@@ -1308,6 +1315,12 @@ logical_expr:
         delete $5;
         $$ = new InExpr(std::unique_ptr<Expression>($1), std::move(*values), true);
         delete values;
+    }
+    | expr NOT IN LPAREN select_stmt RPAREN {
+        $$ = new InSubqueryExpr(std::unique_ptr<Expression>($1), std::unique_ptr<SelectStmt>($5), true);
+    }
+    | EXISTS LPAREN select_stmt RPAREN {
+        $$ = new ExistsExpr(std::unique_ptr<SelectStmt>($3));
     }
     | expr BETWEEN expr AND expr {
         $$ = new BetweenExpr(std::unique_ptr<Expression>($1),

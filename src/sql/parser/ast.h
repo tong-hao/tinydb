@@ -5,6 +5,7 @@
 #include "sql/stmt/join_table.h"
 #include "sql/stmt/statement.h"
 #include "sql/stmt/select_stmt.h"
+#include "sql/stmt/subquery_expr.h"
 #include "sql/stmt/insert_stmt.h"
 #include "sql/stmt/create_table_stmt.h"
 #include "sql/stmt/drop_table_stmt.h"
