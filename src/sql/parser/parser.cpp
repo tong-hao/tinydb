@@ -4,18 +4,18 @@
 #include <cstring>
 #include <sstream>
 
-// 定义全局 AST 指针
-namespace tinydb { namespace sql { class AST; } }
-tinydb::sql::AST* g_ast = nullptr;
+// 定义全局 SQLParseTree 指针
+namespace tinydb { namespace sql { class SQLParseTree; } }
+tinydb::sql::SQLParseTree* g_ast = nullptr;
 
 namespace tinydb {
 namespace sql {
 
 Parser::Parser(const std::string& sql) : sql_(sql) {}
 
-std::unique_ptr<AST> Parser::parse() {
-    // 创建新的 AST 对象
-    auto ast = std::make_unique<AST>();
+std::unique_ptr<SQLParseTree> Parser::parse() {
+    // 创建新的 SQLParseTree 对象
+    auto ast = std::make_unique<SQLParseTree>();
     g_ast = ast.get();
 
     // 设置输入字符串

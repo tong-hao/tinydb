@@ -60,8 +60,8 @@ protected:
         }
     }
 
-    // 辅助函数：解析 SQL 并返回 AST
-    std::unique_ptr<AST> parseSQL(const std::string& sql) {
+    // 辅助函数：解析 SQL 并返回 SQLParseTree
+    std::unique_ptr<SQLParseTree> parseSQL(const std::string& sql) {
         Parser parser(sql);
         return parser.parse();
     }

@@ -160,7 +160,7 @@ WHERE users.age > 25;
 
 ### 查询优化流程
 ```
-SQL Statement -> Parser -> AST
+SQL Statement -> Parser -> SQLParseTree
                                |
                          QueryOptimizer
                                |

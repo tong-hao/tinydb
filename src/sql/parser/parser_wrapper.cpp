@@ -6,8 +6,8 @@ extern int yyparse(void);
 extern void yy_scan_string(const char* str);
 extern void yylex_destroy(void);
 
-// Global AST pointer - defined here
-tinydb::sql::AST* g_ast = nullptr;
+// Global SQLParseTree pointer - defined here
+tinydb::sql::SQLParseTree* g_ast = nullptr;
 
 namespace tinydb {
 namespace sql {
@@ -16,11 +16,11 @@ Parser::Parser(const std::string& sql)
     : sql_(sql) {
 }
 
-std::unique_ptr<AST> Parser::parse() {
+std::unique_ptr<SQLParseTree> Parser::parse() {
     // Reset error state
     error_.clear();
 
-    // Reset global AST
+    // Reset global SQLParseTree
     ::g_ast = nullptr;
 
     // Set up the lexer
@@ -42,7 +42,7 @@ std::unique_ptr<AST> Parser::parse() {
         return nullptr;
     }
 
-    return std::unique_ptr<AST>(::g_ast);
+    return std::unique_ptr<SQLParseTree>(::g_ast);
 }
 
 } // namespace sql

@@ -20,7 +20,10 @@ enum class DataType : uint8_t {
     CHAR = 6,       // 定长字符串
     VARCHAR = 7,    // 变长字符串
     NULL_TYPE = 8,  // NULL值
-    DECIMAL = 9     // DECIMAL类型（存储为DOUBLE）
+    DECIMAL = 9,     // DECIMAL类型（存储为DOUBLE）
+    DATE = 10,
+    TIME = 11,
+    DATETIME = 12
 };
 
 // 获取数据类型大小（定长类型）

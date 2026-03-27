@@ -12,23 +12,23 @@ using namespace tinydb::sql;
 void yyerror(const char* msg);
 int yylex(void);
 
-// 全局 AST 指针
-extern AST* g_ast;
+// 全局 SQLParseTree 指针
+extern SQLParseTree* g_ast;
 %}
 
 %code top {
-    // 前置声明 AST 类
+    // 前置声明 SQLParseTree 类
     namespace tinydb {
     namespace sql {
-        class AST;
+        class SQLParseTree;
         class CreateTableStmt;
     }
     }
 }
 
 %code provides {
-    // 定义全局 AST 指针 - 在这里 AST 类已完整定义
-    extern tinydb::sql::AST* g_ast;
+    // 定义全局 SQLParseTree 指针 - 在这里 SQLParseTree 类已完整定义
+    extern tinydb::sql::SQLParseTree* g_ast;
 }
 
 %code requires {

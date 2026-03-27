@@ -235,8 +235,8 @@ int yyparse (void);
 /* "%code provides" blocks.  */
 #line 28 "src/sql/parser.y"
 
-    // 定义全局 AST 指针 - 在这里 AST 类已完整定义
-    extern tinydb::sql::AST* g_ast;
+    // 定义全局 SQLParseTree 指针 - 在这里 SQLParseTree 类已完整定义
+    extern tinydb::sql::SQLParseTree* g_ast;
 
 #line 242 "src/sql/parser.hpp"
 

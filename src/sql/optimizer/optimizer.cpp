@@ -85,7 +85,7 @@ ExecutionPlan QueryOptimizer::optimize(const sql::SelectStmt* stmt) {
 
     // 添加过滤器（如果有WHERE条件且未被索引处理）
     // Note: We don't take ownership of the condition, just pass nullptr
-    // The condition is owned by the AST
+    // The condition is owned by the SQLParseTree
     if (stmt->whereCondition()) {
         double sel = estimateSelectivity(stmt->fromTable(), stmt->whereCondition());
         // Create filter without taking ownership of condition
@@ -96,7 +96,7 @@ ExecutionPlan QueryOptimizer::optimize(const sql::SelectStmt* stmt) {
 
     // 添加投影
     std::vector<std::unique_ptr<sql::Expression>> projections;
-    // Don't clone expressions - they are owned by the AST
+    // Don't clone expressions - they are owned by the SQLParseTree
     plan.root = createProjectNode(std::move(projections));
     plan.root->children.push_back(current);
 

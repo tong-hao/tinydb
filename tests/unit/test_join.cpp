@@ -105,7 +105,7 @@ TEST_F(JoinTest, NestedLoopJoin) {
     stmt.addJoinTable(std::move(join_table));
 
     // 执行查询
-    sql::AST ast;
+    sql::SQLParseTree ast;
     ast.setStatement(std::make_unique<sql::SelectStmt>(std::move(stmt)));
     auto result = executor_->execute(ast);
 
@@ -134,7 +134,7 @@ TEST_F(JoinTest, JoinWithWhereCondition) {
         std::move(left), std::move(right));
     stmt.setWhereCondition(std::move(where_condition));
 
-    sql::AST ast;
+    sql::SQLParseTree ast;
     ast.setStatement(std::make_unique<sql::SelectStmt>(std::move(stmt)));
     auto result = executor_->execute(ast);
 
@@ -151,7 +151,7 @@ TEST_F(JoinTest, ExecuteJoinMethod) {
     auto join_table = std::make_unique<sql::JoinTable>("orders", sql::JoinType::INNER);
     stmt.addJoinTable(std::move(join_table));
 
-    sql::AST ast;
+    sql::SQLParseTree ast;
     ast.setStatement(std::make_unique<sql::SelectStmt>(std::move(stmt)));
     auto result = executor_->execute(ast);
 
@@ -187,7 +187,7 @@ TEST_F(JoinTest, MultiTableJoin) {
     auto join2 = std::make_unique<sql::JoinTable>("products", sql::JoinType::INNER);
     stmt.addJoinTable(std::move(join2));
 
-    sql::AST ast;
+    sql::SQLParseTree ast;
     ast.setStatement(std::make_unique<sql::SelectStmt>(std::move(stmt)));
     auto result = executor_->execute(ast);
 
@@ -219,7 +219,7 @@ TEST_F(JoinTest, JoinWhereConditionEvaluation) {
         std::move(age_cond), std::move(amt_cond));
     stmt.setWhereCondition(std::move(combined));
 
-    sql::AST ast;
+    sql::SQLParseTree ast;
     ast.setStatement(std::make_unique<sql::SelectStmt>(std::move(stmt)));
     auto result = executor_->execute(ast);
 

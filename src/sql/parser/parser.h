@@ -13,7 +13,7 @@ public:
     explicit Parser(const std::string& sql);
 
     // 解析入口
-    std::unique_ptr<AST> parse();
+    std::unique_ptr<SQLParseTree> parse();
 
     // 获取错误信息
     const std::string& error() const { return error_; }
