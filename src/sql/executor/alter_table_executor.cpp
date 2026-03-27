@@ -94,6 +94,23 @@ ExecutionResult AlterTableExecutor::execute(const sql::AlterTableStmt* stmt) {
             }
         }
 
+        case sql::AlterTableStmt::ActionType::ALTER_COLUMN_TYPE: {
+            // Alter column type (same as MODIFY_COLUMN)
+            storage::ColumnDef col_def(
+                stmt->columnName(),
+                parseDataType(stmt->columnType()),
+                parseTypeLength(stmt->columnType())
+            );
+
+            if (storage_engine_->modifyColumn(table_name, stmt->columnName(), col_def)) {
+                return ExecutionResult::ok("ALTER TABLE ALTER COLUMN " + stmt->columnName() +
+                                           " TYPE " + stmt->columnType() + " ON " + table_name);
+            } else {
+                return ExecutionResult::error("Failed to alter column type for " + stmt->columnName() +
+                                              " in table " + table_name);
+            }
+        }
+
         default:
             return ExecutionResult::error("Unknown ALTER TABLE action");
     }

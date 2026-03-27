@@ -464,7 +464,6 @@ select_stmt:
             delete $6;
         }
         if ($7) {
-        if ($7) {
             $$->setWhereCondition(std::unique_ptr<Expression>($7));
         }
         if ($8) {
@@ -496,7 +495,34 @@ select_stmt:
             delete $11;
         }
     }
-    ;
+    /* SELECT without FROM clause (e.g., SELECT 1, SELECT NOW()) */
+    | SELECT DISTINCT select_list {
+        $$ = new SelectStmt();
+        $$->setDistinct(true);
+        if ($3) {
+            for (auto& expr : *$3) {
+                $$->addSelectItem(std::move(expr));
+            }
+            delete $3;
+        }
+    }
+    | SELECT select_list {
+        $$ = new SelectStmt();
+        if ($2) {
+            for (auto& expr : *$2) {
+                $$->addSelectItem(std::move(expr));
+            }
+            delete $2;
+        }
+    }
+    | SELECT DISTINCT STAR {
+        $$ = new SelectStmt();
+        $$->setDistinct(true);
+        $$->addSelectItem(std::make_unique<ColumnRefExpr>("*"));
+    }
+    | SELECT STAR {
+        $$ = new SelectStmt();
+        $$->addSelectItem(std::make_unique<ColumnRefExpr>("*"));
     }
     ;
 
