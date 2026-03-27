@@ -8,6 +8,7 @@ namespace sql {
 
 class DropIndexStmt : public Statement {
 public:
+    StatementType type() const override { return StatementType::DROP_INDEX; }
     explicit DropIndexStmt(std::string index_name)
         : index_name_(std::move(index_name)) {}
 

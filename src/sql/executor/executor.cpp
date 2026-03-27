@@ -40,57 +40,90 @@ ExecutionResult Executor::execute(const sql::SQLParseTree& ast) {
     const sql::Statement* stmt = ast.statement();
 
     // 根据语句类型分发执行
-    if (auto select_stmt = dynamic_cast<const sql::SelectStmt*>(stmt)) {
-        SelectExecutor e(storage_engine_);
-        return e.execute(select_stmt);
-    } else if (auto insert_stmt = dynamic_cast<const sql::InsertStmt*>(stmt)) {
-        InsertExecutor e(storage_engine_);
-        return e.execute(insert_stmt);
-    }  else if (auto update_stmt = dynamic_cast<const sql::UpdateStmt*>(stmt)) {
-        UpdateExecutor e(storage_engine_);
-        return e.execute(update_stmt);
-    } else if (auto delete_stmt = dynamic_cast<const sql::DeleteStmt*>(stmt)) {
-        DeleteExecutor e(storage_engine_, current_txn_);
-        return e.execute(delete_stmt);
-    } else if (auto create_stmt = dynamic_cast<const sql::CreateTableStmt*>(stmt)) {
-        CreateTableExecutor e(storage_engine_);
-        return e.execute(create_stmt);
-    } else if (auto drop_stmt = dynamic_cast<const sql::DropTableStmt*>(stmt)) {
-        DropTableExecutor e(storage_engine_);
-        return e.execute(drop_stmt);
-    } else if (auto alter_stmt = dynamic_cast<const sql::AlterTableStmt*>(stmt)) {
-        AlterTableExecutor e(storage_engine_);
-        return e.execute(alter_stmt);
-    } else if (auto begin_stmt = dynamic_cast<const sql::BeginStmt*>(stmt)) {
-        BeginExecutor e(storage_engine_, &current_txn_);
-        return e.execute(begin_stmt);
-    } else if (auto commit_stmt = dynamic_cast<const sql::CommitStmt*>(stmt)) {
-        CommitExecutor e(storage_engine_, &current_txn_);
-        return e.execute(commit_stmt);
-    } else if (auto rollback_stmt = dynamic_cast<const sql::RollbackStmt*>(stmt)) {
-        RollbackExecutor e(storage_engine_, &current_txn_);
-        return e.execute(rollback_stmt);
-    } else if (auto create_index_stmt = dynamic_cast<const sql::CreateIndexStmt*>(stmt)) {
-        CreateIndexExecutor e(storage_engine_);
-        return e.execute(create_index_stmt);
-    } else if (auto drop_index_stmt = dynamic_cast<const sql::DropIndexStmt*>(stmt)) {
-        DropIndexExecutor e(storage_engine_);
-        return e.execute(drop_index_stmt);
-    } else if (auto analyze_stmt = dynamic_cast<const sql::AnalyzeStmt*>(stmt)) {
-        AnalyzeExecutor e(storage_engine_);
-        return e.execute(analyze_stmt);
-    } else if (auto explain_stmt = dynamic_cast<const sql::ExplainStmt*>(stmt)) {
-        ExplainExecutor e(storage_engine_);
-        return e.execute(explain_stmt);
-    } else if (auto create_view_stmt = dynamic_cast<const sql::CreateViewStmt*>(stmt)) {
-        CreateViewExecutor e(storage_engine_, &views_);
-        return e.execute(create_view_stmt);
-    } else if (auto drop_view_stmt = dynamic_cast<const sql::DropViewStmt*>(stmt)) {
-        DropViewExecutor e(storage_engine_, &views_);
-        return e.execute(drop_view_stmt);
+    switch (stmt->type()) {
+        case sql::StatementType::SELECT: {
+            const auto* select_stmt = static_cast<const sql::SelectStmt*>(stmt);
+            SelectExecutor e(storage_engine_);
+            return e.execute(select_stmt);
+        }
+        case sql::StatementType::INSERT: {
+            const auto* insert_stmt = static_cast<const sql::InsertStmt*>(stmt);
+            InsertExecutor e(storage_engine_);
+            return e.execute(insert_stmt);
+        }
+        case sql::StatementType::UPDATE: {
+            const auto* update_stmt = static_cast<const sql::UpdateStmt*>(stmt);
+            UpdateExecutor e(storage_engine_);
+            return e.execute(update_stmt);
+        }
+        case sql::StatementType::DELETE: {
+            const auto* delete_stmt = static_cast<const sql::DeleteStmt*>(stmt);
+            DeleteExecutor e(storage_engine_, current_txn_);
+            return e.execute(delete_stmt);
+        }
+        case sql::StatementType::CREATE_TABLE: {
+            const auto* create_stmt = static_cast<const sql::CreateTableStmt*>(stmt);
+            CreateTableExecutor e(storage_engine_);
+            return e.execute(create_stmt);
+        }
+        case sql::StatementType::DROP_TABLE: {
+            const auto* drop_stmt = static_cast<const sql::DropTableStmt*>(stmt);
+            DropTableExecutor e(storage_engine_);
+            return e.execute(drop_stmt);
+        }
+        case sql::StatementType::ALTER_TABLE: {
+            const auto* alter_stmt = static_cast<const sql::AlterTableStmt*>(stmt);
+            AlterTableExecutor e(storage_engine_);
+            return e.execute(alter_stmt);
+        }
+        case sql::StatementType::BEGIN: {
+            const auto* begin_stmt = static_cast<const sql::BeginStmt*>(stmt);
+            BeginExecutor e(storage_engine_, &current_txn_);
+            return e.execute(begin_stmt);
+        }
+        case sql::StatementType::COMMIT: {
+            const auto* commit_stmt = static_cast<const sql::CommitStmt*>(stmt);
+            CommitExecutor e(storage_engine_, &current_txn_);
+            return e.execute(commit_stmt);
+        }
+        case sql::StatementType::ROLLBACK: {
+            const auto* rollback_stmt = static_cast<const sql::RollbackStmt*>(stmt);
+            RollbackExecutor e(storage_engine_, &current_txn_);
+            return e.execute(rollback_stmt);
+        }
+        case sql::StatementType::CREATE_INDEX: {
+            const auto* create_index_stmt = static_cast<const sql::CreateIndexStmt*>(stmt);
+            CreateIndexExecutor e(storage_engine_);
+            return e.execute(create_index_stmt);
+        }
+        case sql::StatementType::DROP_INDEX: {
+            const auto* drop_index_stmt = static_cast<const sql::DropIndexStmt*>(stmt);
+            DropIndexExecutor e(storage_engine_);
+            return e.execute(drop_index_stmt);
+        }
+        case sql::StatementType::ANALYZE: {
+            const auto* analyze_stmt = static_cast<const sql::AnalyzeStmt*>(stmt);
+            AnalyzeExecutor e(storage_engine_);
+            return e.execute(analyze_stmt);
+        }
+        case sql::StatementType::EXPLAIN: {
+            const auto* explain_stmt = static_cast<const sql::ExplainStmt*>(stmt);
+            ExplainExecutor e(storage_engine_);
+            return e.execute(explain_stmt);
+        }
+        case sql::StatementType::CREATE_VIEW: {
+            const auto* create_view_stmt = static_cast<const sql::CreateViewStmt*>(stmt);
+            CreateViewExecutor e(storage_engine_, &views_);
+            return e.execute(create_view_stmt);
+        }
+        case sql::StatementType::DROP_VIEW: {
+            const auto* drop_view_stmt = static_cast<const sql::DropViewStmt*>(stmt);
+            DropViewExecutor e(storage_engine_, &views_);
+            return e.execute(drop_view_stmt);
+        }
+        default:
+            return ExecutionResult::error("Unsupported statement type");
     }
-
-    return ExecutionResult::error("Unsupported statement type");
 }
 
 ExecutionResult Executor::execute(const std::string &sql)

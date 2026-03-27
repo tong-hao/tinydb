@@ -8,6 +8,7 @@ namespace sql {
 
 class DropViewStmt : public Statement {
 public:
+    StatementType type() const override { return StatementType::DROP_VIEW; }
     explicit DropViewStmt(std::string view_name, bool if_exists = false)
         : view_name_(std::move(view_name)), if_exists_(if_exists) {}
 

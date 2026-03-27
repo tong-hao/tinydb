@@ -20,6 +20,7 @@ struct OrderByItem {
 
 class SelectStmt : public Statement {
 public:
+    StatementType type() const override { return StatementType::SELECT; }
     void setDistinct(bool distinct) { distinct_ = distinct; }
     bool isDistinct() const { return distinct_; }
 

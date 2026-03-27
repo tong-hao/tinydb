@@ -11,6 +11,7 @@ namespace sql {
 
 class InsertStmt : public Statement {
 public:
+    StatementType type() const override { return StatementType::INSERT; }
     void setTable(const std::string& table) { table_ = table; }
     void addColumn(const std::string& col) { columns_.push_back(col); }
     void addValue(std::unique_ptr<Expression> val) {

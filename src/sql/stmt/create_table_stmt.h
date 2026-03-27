@@ -11,6 +11,7 @@ namespace sql {
 
 class CreateTableStmt : public Statement {
 public:
+    StatementType type() const override { return StatementType::CREATE_TABLE; }
     struct ColumnDef {
         std::string name;
         std::string type;

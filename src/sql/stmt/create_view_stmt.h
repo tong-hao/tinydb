@@ -10,6 +10,7 @@ namespace sql {
 
 class CreateViewStmt : public Statement {
 public:
+    StatementType type() const override { return StatementType::CREATE_VIEW; }
     void setViewName(const std::string& name) { view_name_ = name; }
     void setSelectStmt(std::unique_ptr<SelectStmt> select) { select_stmt_ = std::move(select); }
 

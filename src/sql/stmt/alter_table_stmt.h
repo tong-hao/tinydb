@@ -8,6 +8,7 @@ namespace sql {
 
 class AlterTableStmt : public Statement {
 public:
+    StatementType type() const override { return StatementType::ALTER_TABLE; }
     enum class ActionType {
         ADD_COLUMN,
         DROP_COLUMN,

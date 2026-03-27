@@ -9,6 +9,7 @@ namespace sql {
 
 class ExplainStmt : public Statement {
 public:
+    StatementType type() const override { return StatementType::EXPLAIN; }
     ExplainStmt() = default;
     explicit ExplainStmt(std::unique_ptr<Statement> stmt)
         : statement_(std::move(stmt)) {}

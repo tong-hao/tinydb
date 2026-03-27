@@ -93,34 +93,6 @@ SELECT * FROM tn_stat_replication;
 SELECT * FROM tn_backup_list;
 ```
 
-## 文档
-
-- [docs/Feature.md](Feature.md) - 5阶段开发计划
-- [docs/Phase3_Summary.md](Phase3_Summary.md) - 阶段三总结
-- [docs/Phase4_Summary.md](Phase4_Summary.md) - 阶段四总结
-- [docs/Phase5_Summary.md](Phase5_Summary.md) - 阶段五总结
-- [docs/design.md](docs/design.md) - 架构设计文档
-- [docs/protocol.md](docs/protocol.md) - 通信协议文档
-- [docs/storage_design.md](docs/storage_design.md) - 存储引擎设计
-
-## 目录结构
-
-```
-├── bin/                   # 可执行文件
-│   ├── tinydb-server      # 数据库服务器
-│   └── tinydb-cli         # 交互式客户端
-├── src/                   # 源代码
-│   ├── common/            # 公共组件
-│   ├── network/           # 网络层
-│   ├── sql/               # SQL解析
-│   ├── storage/           # 存储引擎
-│   ├── engine/            # 执行引擎
-│   └── server/            # 服务器
-├── client/                # 客户端 SDK
-├── tests/                 # 测试代码
-└── docs/                  # 文档
-```
-
 ## 测试
 
 ```bash
@@ -145,6 +117,3 @@ ctest
 
 MIT License
 
-## 致谢
-
-设计参考 PostgreSQL 和 SQLite。

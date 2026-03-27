@@ -11,6 +11,7 @@ namespace sql {
 
 class UpdateStmt : public Statement {
 public:
+    StatementType type() const override { return StatementType::UPDATE; }
     void setTable(const std::string& table) { table_ = table; }
     void addAssignment(const std::string& column, std::unique_ptr<Expression> value) {
         assignments_.push_back({column, std::move(value)});

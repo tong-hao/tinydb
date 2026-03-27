@@ -10,6 +10,7 @@ namespace sql {
 
 class DeleteStmt : public Statement {
 public:
+    StatementType type() const override { return StatementType::DELETE; }
     void setTable(const std::string& table) { table_ = table; }
     void setWhereCondition(std::unique_ptr<Expression> condition) { where_condition_ = std::move(condition); }
 

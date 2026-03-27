@@ -8,6 +8,7 @@ namespace sql {
 
 class CreateIndexStmt : public Statement {
 public:
+    StatementType type() const override { return StatementType::CREATE_INDEX; }
     void setIndexName(const std::string& name) { index_name_ = name; }
     void setTableName(const std::string& name) { table_name_ = name; }
     void setColumnName(const std::string& name) { column_name_ = name; }

@@ -8,6 +8,7 @@ namespace sql {
 
 class AnalyzeStmt : public Statement {
 public:
+    StatementType type() const override { return StatementType::ANALYZE; }
     explicit AnalyzeStmt(std::string table_name)
         : table_name_(std::move(table_name)) {}
 
