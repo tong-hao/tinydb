@@ -151,7 +151,7 @@ bool StorageEngine::update(const std::string& table_name, const TID& tid, const 
     if (!new_tid.isValid()) {
         // 插入失败，尝试恢复旧元组
         LOG_ERROR("Failed to insert new tuple during update");
-        // 注意：这里简化处理，实际应该通过WAL恢复
+        // 注意：这里简化处理，实际应该通过WAL恢复 TODO: 
         return false;
     }
 

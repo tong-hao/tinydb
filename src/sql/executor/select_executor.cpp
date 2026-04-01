@@ -139,7 +139,7 @@ ExecutionResult SelectExecutor::execute(const sql::SelectStmt* stmt) {
                 // 注意：完整的 WHERE 评估需要更复杂的实现
                 bool skip = false;
                 if (where_condition) {
-                    // 简化处理：检查字符串匹配
+                    // TODO: 简化处理：检查字符串匹配
                     // 对于系统视图，我们暂时不过滤或仅做简单过滤
                 }
                 if (skip) continue;

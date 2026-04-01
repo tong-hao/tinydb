@@ -401,17 +401,17 @@ double StatisticsManager::estimateRangeSelectivity(const std::string& table_name
 
     // 估算范围选择率
     // 假设数据均匀分布
-    // 实际应该使用直方图，这里简化处理
+    // 实际应该使用直方图，这里简化处理 TODO: 
     return 0.3;
 }
 
 bool StatisticsManager::saveStats() {
-    // 保存到系统表（简化处理）
+    // 保存到系统表（简化处理） TODO: 
     return true;
 }
 
 bool StatisticsManager::loadStats() {
-    // 从系统表加载（简化处理）
+    // 从系统表加载（简化处理）TODO: 
     return true;
 }
 

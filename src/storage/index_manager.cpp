@@ -178,19 +178,19 @@ bool IndexManager::deleteEntry(const std::string& table_name, const std::string&
 
 bool IndexManager::loadIndexes() {
     // 从系统表加载索引
-    // 这里简化处理，实际应该从tn_index表读取
+    // TODO: 这里简化处理，实际应该从tn_index表读取
     return true;
 }
 
 bool IndexManager::saveIndexMeta(const IndexMeta& meta) {
     // 保存到tn_index系统表
-    // 简化处理，实际应该插入到系统表
+    // TODO: 简化处理，实际应该插入到系统表
     return true;
 }
 
 bool IndexManager::removeIndexMeta(const std::string& index_name) {
     // 从tn_index系统表删除
-    // 简化处理
+    // TODO: 简化处理
     return true;
 }
 
