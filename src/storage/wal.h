@@ -90,7 +90,6 @@ private:
     friend class WALManager;
 };
 
-// TODO: 没用起来
 // WAL日志管理器
 class WALManager {
 public:
