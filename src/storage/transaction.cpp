@@ -1,4 +1,5 @@
 #include "transaction.h"
+#include "storage_engine.h"
 #include "common/logger.h"
 #include <chrono>
 
@@ -180,16 +181,41 @@ size_t TransactionManager::getActiveTransactionCount() const {
 }
 
 bool TransactionManager::doCommit(Transaction* txn) {
+    if (!txn) {
+        LOG_ERROR("Cannot commit null transaction");
+        return false;
+    }
+
     // 设置事务状态为提交中
     txn->setState(TransactionState::COMMITTING);
 
     // 1. 写入 COMMIT 日志记录（WAL）
-    // 注意：实际WAL写入在存储引擎层完成，这里只是状态管理
+    if (storage_engine_) {
+        WALManager* wal = storage_engine_->getWALManager();
+        if (wal) {
+            wal->logCommit(txn->getId());
+        }
+    }
 
     // 2. 刷盘所有修改过的页
-    // 注意：实际刷盘在存储引擎层完成
+    if (storage_engine_) {
+        BufferPoolManager* buffer_pool = storage_engine_->getBufferPool();
+        if (buffer_pool) {
+            for (uint32_t page_id : txn->getModifiedPages()) {
+                buffer_pool->flushPage(page_id);
+            }
+        }
+    }
 
-    // 3. 清除事务的修改记录
+    // 3. 强制刷盘WAL确保日志持久化
+    if (storage_engine_) {
+        WALManager* wal = storage_engine_->getWALManager();
+        if (wal) {
+            wal->flush();
+        }
+    }
+
+    // 4. 清除事务的修改记录
     txn->clearRecords();
     txn->clearModifiedPages();
 
@@ -197,15 +223,50 @@ bool TransactionManager::doCommit(Transaction* txn) {
 }
 
 bool TransactionManager::doAbort(Transaction* txn) {
+    if (!txn) {
+        LOG_ERROR("Cannot abort null transaction");
+        return false;
+    }
+
     // 设置事务状态为回滚中
     txn->setState(TransactionState::ABORTING);
 
     // 1. 写入 ROLLBACK 日志记录
+    if (storage_engine_) {
+        WALManager* wal = storage_engine_->getWALManager();
+        if (wal) {
+            wal->logRollback(txn->getId());
+        }
+    }
 
-    // 2. 回滚所有修改（通过存储引擎）
-    // 注意：实际回滚在存储引擎层完成
+    // 2. 回滚所有修改
+    if (storage_engine_) {
+        TableManager* table_manager = storage_engine_->getTableManager();
+        BufferPoolManager* buffer_pool = storage_engine_->getBufferPool();
 
-    // 3. 清除事务的修改记录
+        if (table_manager) {
+            // 2.1 回滚插入操作：删除已插入的元组
+            for (const auto& insert_rec : txn->getInsertRecords()) {
+                table_manager->deleteTuple(insert_rec.table_name, insert_rec.tid);
+            }
+
+            // 2.2 回滚删除操作：重新插入被删除的元组
+            for (const auto& delete_rec : txn->getDeleteRecords()) {
+                // 重新插入被删除的元组
+                table_manager->insertTuple(delete_rec.table_name, delete_rec.old_tuple);
+            }
+        }
+    }
+
+    // 3. 强制刷盘WAL
+    if (storage_engine_) {
+        WALManager* wal = storage_engine_->getWALManager();
+        if (wal) {
+            wal->flush();
+        }
+    }
+
+    // 4. 清除事务的修改记录
     txn->clearRecords();
     txn->clearModifiedPages();
 
