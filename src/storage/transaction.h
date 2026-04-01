@@ -10,6 +10,13 @@
 #include "wal.h"
 #include "tuple.h"
 
+// 前置声明
+namespace tinydb {
+namespace storage {
+class StorageEngine;
+}
+}
+
 namespace tinydb {
 namespace storage {
 
@@ -107,6 +114,9 @@ public:
     // 获取下一个事务ID
     TransactionId getNextTransactionId() { return next_txn_id_++; }
 
+    // 设置存储引擎（用于访问表和WAL）
+    void setStorageEngine(StorageEngine* engine) { storage_engine_ = engine; }
+
     // 检查是否有活跃事务
     bool hasActiveTransactions() const;
 
@@ -120,6 +130,9 @@ private:
 
     // 当前线程的事务（简化实现，假设单线程）
     Transaction* current_txn_ = nullptr;
+
+    // 存储引擎指针（用于访问表和WAL）
+    StorageEngine* storage_engine_ = nullptr;
 
     // 内部提交实现
     bool doCommit(Transaction* txn);

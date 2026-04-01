@@ -36,6 +36,7 @@ bool StorageEngine::initialize() {
 
     // 创建事务管理器（阶段三新增）
     transaction_manager_ = std::make_unique<TransactionManager>();
+    transaction_manager_->setStorageEngine(this);
     g_transaction_manager = transaction_manager_.get();
 
     // 创建锁管理器（阶段三新增）
