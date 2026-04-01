@@ -78,34 +78,34 @@ private:
     void registerSystemViews();
 
     // 查询 tn_stat_activity
-    SystemViewResult queryPgStatActivity();
+    SystemViewResult queryTnStatActivity();
 
     // 查询 tn_stat_database
-    SystemViewResult queryPgStatDatabase();
+    SystemViewResult queryTnStatDatabase();
 
     // 查询 tn_stat_user_tables
-    SystemViewResult queryPgStatUserTables();
+    SystemViewResult queryTnStatUserTables();
 
     // 查询 tn_stat_user_indexes
-    SystemViewResult queryPgStatUserIndexes();
+    SystemViewResult queryTnStatUserIndexes();
 
     // 查询 tn_locks
-    SystemViewResult queryPgLocks();
+    SystemViewResult queryTnLocks();
 
     // 查询 tn_stat_replication
-    SystemViewResult queryPgStatReplication();
+    SystemViewResult queryTnStatReplication();
 
     // 查询 tn_tables
-    SystemViewResult queryPgTables();
+    SystemViewResult queryTnTables();
 
     // 查询 tn_indexes
-    SystemViewResult queryPgIndexes();
+    SystemViewResult queryTnIndexes();
 
     // 查询 tn_user
-    SystemViewResult queryPgUser();
+    SystemViewResult queryTnUser();
 
     // 查询 tn_database
-    SystemViewResult queryPgDatabase();
+    SystemViewResult queryTnDatabase();
 
     // 查询备份列表
     SystemViewResult queryBackupList();

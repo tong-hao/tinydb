@@ -294,25 +294,25 @@ SystemViewResult SystemViewManager::querySystemView(const std::string& view_name
 
     // 根据视图名称路由到对应的查询方法
     if (view_name == "tn_stat_activity") {
-        return queryPgStatActivity();
+        return queryTnStatActivity();
     } else if (view_name == "tn_stat_database") {
-        return queryPgStatDatabase();
+        return queryTnStatDatabase();
     } else if (view_name == "tn_stat_user_tables") {
-        return queryPgStatUserTables();
+        return queryTnStatUserTables();
     } else if (view_name == "tn_stat_user_indexes") {
-        return queryPgStatUserIndexes();
+        return queryTnStatUserIndexes();
     } else if (view_name == "tn_locks") {
-        return queryPgLocks();
+        return queryTnLocks();
     } else if (view_name == "tn_stat_replication") {
-        return queryPgStatReplication();
+        return queryTnStatReplication();
     } else if (view_name == "tn_tables") {
-        return queryPgTables();
+        return queryTnTables();
     } else if (view_name == "tn_indexes") {
-        return queryPgIndexes();
+        return queryTnIndexes();
     } else if (view_name == "tn_user") {
-        return queryPgUser();
+        return queryTnUser();
     } else if (view_name == "tn_database") {
-        return queryPgDatabase();
+        return queryTnDatabase();
     } else if (view_name == "tn_backup_list") {
         return queryBackupList();
     } else if (view_name == "tn_restore_points") {
@@ -325,7 +325,7 @@ SystemViewResult SystemViewManager::querySystemView(const std::string& view_name
     return result;
 }
 
-SystemViewResult SystemViewManager::queryPgStatActivity() {
+SystemViewResult SystemViewManager::queryTnStatActivity() {
     SystemViewResult result;
     result.column_names = {"pid", "usename", "application_name", "client_addr",
                           "client_port", "database_name", "query", "state",
@@ -352,7 +352,7 @@ SystemViewResult SystemViewManager::queryPgStatActivity() {
     return result;
 }
 
-SystemViewResult SystemViewManager::queryPgStatDatabase() {
+SystemViewResult SystemViewManager::queryTnStatDatabase() {
     SystemViewResult result;
     result.column_names = {"datname", "numbackends", "xact_commit", "xact_rollback",
                           "blks_read", "blks_hit", "tup_returned", "tup_fetched",
@@ -386,7 +386,7 @@ SystemViewResult SystemViewManager::queryPgStatDatabase() {
     return result;
 }
 
-SystemViewResult SystemViewManager::queryPgStatUserTables() {
+SystemViewResult SystemViewManager::queryTnStatUserTables() {
     SystemViewResult result;
     result.column_names = {"relid", "schemaname", "relname", "seq_scan", "seq_tup_read",
                           "idx_scan", "idx_tup_fetch", "n_tup_ins", "n_tup_upd",
@@ -421,7 +421,7 @@ SystemViewResult SystemViewManager::queryPgStatUserTables() {
     return result;
 }
 
-SystemViewResult SystemViewManager::queryPgStatUserIndexes() {
+SystemViewResult SystemViewManager::queryTnStatUserIndexes() {
     SystemViewResult result;
     result.column_names = {"relid", "indexrelid", "schemaname", "relname", "indexrelname",
                           "idx_scan", "idx_tup_read", "idx_tup_fetch"};
@@ -446,7 +446,7 @@ SystemViewResult SystemViewManager::queryPgStatUserIndexes() {
     return result;
 }
 
-SystemViewResult SystemViewManager::queryPgLocks() {
+SystemViewResult SystemViewManager::queryTnLocks() {
     SystemViewResult result;
     result.column_names = {"locktype", "database", "relation", "page", "tuple",
                           "virtualxid", "transactionid", "classid", "objid",
@@ -479,7 +479,7 @@ SystemViewResult SystemViewManager::queryPgLocks() {
     return result;
 }
 
-SystemViewResult SystemViewManager::queryPgStatReplication() {
+SystemViewResult SystemViewManager::queryTnStatReplication() {
     SystemViewResult result;
     result.column_names = {"pid", "usesysid", "usename", "application_name", "client_addr",
                           "client_hostname", "client_port", "backend_start", "backend_xmin",
@@ -517,7 +517,7 @@ SystemViewResult SystemViewManager::queryPgStatReplication() {
     return result;
 }
 
-SystemViewResult SystemViewManager::queryPgTables() {
+SystemViewResult SystemViewManager::queryTnTables() {
     SystemViewResult result;
     result.column_names = {"schemaname", "tablename", "tableowner", "tablespace",
                           "hasindexes", "hasrules", "hastriggers"};
@@ -555,7 +555,7 @@ SystemViewResult SystemViewManager::queryPgTables() {
     return result;
 }
 
-SystemViewResult SystemViewManager::queryPgIndexes() {
+SystemViewResult SystemViewManager::queryTnIndexes() {
     SystemViewResult result;
     result.column_names = {"schemaname", "tablename", "indexname", "tablespace", "indexdef"};
 
@@ -575,7 +575,7 @@ SystemViewResult SystemViewManager::queryPgIndexes() {
     return result;
 }
 
-SystemViewResult SystemViewManager::queryPgUser() {
+SystemViewResult SystemViewManager::queryTnUser() {
     SystemViewResult result;
     result.column_names = {"usename", "usesysid", "usecreatedb", "usesuper", "userepl",
                           "usebypassrls", "passwd", "valuntil", "useconfig"};
@@ -608,7 +608,7 @@ SystemViewResult SystemViewManager::queryPgUser() {
     return result;
 }
 
-SystemViewResult SystemViewManager::queryPgDatabase() {
+SystemViewResult SystemViewManager::queryTnDatabase() {
     SystemViewResult result;
     result.column_names = {"datname", "datdba", "encoding", "datcollate", "datctype",
                           "datistemplate", "datallowconn", "datconnlimit", "datlastsysoid",
