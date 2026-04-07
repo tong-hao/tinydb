@@ -1,6 +1,7 @@
 #include "insert_executor.h"
 #include "executor.h"
 #include "common/logger.h"
+#include "storage/btree_index.h"
 
 namespace tinydb {
 namespace engine {
@@ -130,6 +131,22 @@ ExecutionResult InsertExecutor::execute(const sql::InsertStmt* stmt) {
                     txn->addInsertRecord(table_name, tid);
                 }
 
+                // 更新索引
+                if (auto index_manager = storage_engine_->getIndexManager()) {
+                    auto table_indexes = index_manager->getTableIndexes(table_name);
+                    for (const auto& index : table_indexes) {
+                        const auto& meta = index->getMeta();
+                        auto col_idx = table_meta->schema.findColumnIndex(meta.column_name);
+                        if (col_idx != static_cast<size_t>(-1)) {
+                            const auto& field = tuple.getField(col_idx);
+                            if (!field.isNull()) {
+                                auto key = storage::IndexKey::fromField(field);
+                                index_manager->insertEntry(table_name, meta.column_name, key, tid);
+                            }
+                        }
+                    }
+                }
+
                 inserted_count++;
             }
         } else {
@@ -217,6 +234,22 @@ ExecutionResult InsertExecutor::execute(const sql::InsertStmt* stmt) {
             // 记录插入（用于回滚）
             if (txn) {
                 txn->addInsertRecord(table_name, tid);
+            }
+
+            // 更新索引
+            if (auto index_manager = storage_engine_->getIndexManager()) {
+                auto table_indexes = index_manager->getTableIndexes(table_name);
+                for (const auto& index : table_indexes) {
+                    const auto& meta = index->getMeta();
+                    auto col_idx = table_meta->schema.findColumnIndex(meta.column_name);
+                    if (col_idx != static_cast<size_t>(-1)) {
+                        const auto& field = tuple.getField(col_idx);
+                        if (!field.isNull()) {
+                            auto key = storage::IndexKey::fromField(field);
+                            index_manager->insertEntry(table_name, meta.column_name, key, tid);
+                        }
+                    }
+                }
             }
 
             inserted_count = 1;
