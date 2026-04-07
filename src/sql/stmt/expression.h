@@ -22,7 +22,7 @@ public:
     const std::string& columnName() const { return column_name_; }
 
     std::string toString() const override {
-        return "ColumnRef(" + column_name_ + ")";
+        return column_name_;
     }
 
 private:
@@ -55,7 +55,7 @@ public:
     const std::string& value() const { return value_; }
 
     std::string toString() const override {
-        return "Literal(" + value_ + ")";
+        return value_;
     }
 
 private:
@@ -92,7 +92,7 @@ public:
             case OpType::MOD: op_str = "%"; break;
             default: op_str = "?"; break;
         }
-        return "(" + left_->toString() + " " + op_str + " " + right_->toString() + ")";
+        return left_->toString() + " " + op_str + " " + right_->toString();
     }
 
 private:
@@ -122,7 +122,7 @@ public:
             case OpType::GE: op_str = ">="; break;
             default: op_str = "?"; break;
         }
-        return "(" + left_->toString() + " " + op_str + " " + right_->toString() + ")";
+        return left_->toString() + " " + op_str + " " + right_->toString();
     }
 
 private:
@@ -152,7 +152,7 @@ public:
         if (op_ == OpType::NOT) {
             return op_str + " " + left_->toString();
         }
-        return "(" + left_->toString() + " " + op_str + " " + right_->toString() + ")";
+        return left_->toString() + " " + op_str + " " + right_->toString();
     }
 
 private:

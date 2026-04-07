@@ -11,14 +11,15 @@ namespace engine {
 
 class SelectExecutor {
 public:
-    SelectExecutor(storage::StorageEngine* storage_engine);
+    SelectExecutor(storage::StorageEngine* storage_engine,
+                   std::unordered_map<std::string, ViewMeta>* views = nullptr);
     virtual ~SelectExecutor();
 
     ExecutionResult execute(const sql::SelectStmt* stmt);
 
 private:
     storage::StorageEngine* storage_engine_;
-    std::unordered_map<std::string, ViewMeta> views_;
+    std::unordered_map<std::string, ViewMeta>* views_;
 
     ExecutionResult executeJoin(const sql::SelectStmt* stmt);
     ExecutionResult executeSimpleJoin(const sql::SelectStmt* stmt, const std::vector<std::string>& tables, std::string& result);

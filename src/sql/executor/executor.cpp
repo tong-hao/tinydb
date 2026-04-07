@@ -43,7 +43,7 @@ ExecutionResult Executor::execute(const sql::SQLParseTree& ast) {
     switch (stmt->type()) {
         case sql::StatementType::SELECT: {
             const auto* select_stmt = static_cast<const sql::SelectStmt*>(stmt);
-            SelectExecutor e(storage_engine_);
+            SelectExecutor e(storage_engine_, &views_);
             return e.execute(select_stmt);
         }
         case sql::StatementType::INSERT: {

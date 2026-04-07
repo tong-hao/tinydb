@@ -205,8 +205,9 @@ static bool evaluateSystemViewWhereCondition(
     return true;
 }
 
-SelectExecutor::SelectExecutor(storage::StorageEngine* storage_engine)
-    : storage_engine_(storage_engine) {
+SelectExecutor::SelectExecutor(storage::StorageEngine* storage_engine,
+                               std::unordered_map<std::string, ViewMeta>* views)
+    : storage_engine_(storage_engine), views_(views) {
     LOG_INFO("SelectExecutor initialized");
 }
 
@@ -358,72 +359,74 @@ ExecutionResult SelectExecutor::execute(const sql::SelectStmt* stmt) {
         }
 
         // Check if this is a user-defined view
-        auto view_it = views_.find(table_name);
-        if (view_it != views_.end()) {
-            // This is a view - parse and execute the underlying SELECT
-            const ViewMeta& view_meta = view_it->second;
+        if (views_) {
+            auto view_it = views_->find(table_name);
+            if (view_it != views_->end()) {
+                // This is a view - parse and execute the underlying SELECT
+                const ViewMeta& view_meta = view_it->second;
 
-            // Parse the view's SQL definition
-            sql::Parser view_parser(view_meta.sql_definition);
-            auto view_ast = view_parser.parse();
+                // Parse the view's SQL definition
+                sql::Parser view_parser(view_meta.sql_definition);
+                auto view_ast = view_parser.parse();
 
-            if (!view_ast || !view_ast->statement()) {
-                return ExecutionResult::error("Failed to parse view definition");
-            }
-
-            auto view_select = dynamic_cast<sql::SelectStmt*>(view_ast->statement());
-            if (!view_select) {
-                return ExecutionResult::error("View definition is not a SELECT statement");
-            }
-
-            // Get the base table from the view's SELECT
-            std::string view_base_table = view_select->fromTable();
-            if (view_base_table.empty()) {
-                return ExecutionResult::error("View has no base table");
-            }
-
-            // Check if base table exists
-            if (!storage_engine_->tableExists(view_base_table)) {
-                return ExecutionResult::error("View base table does not exist: " + view_base_table);
-            }
-
-            auto table_meta = storage_engine_->getTable(view_base_table);
-            if (!table_meta) {
-                return ExecutionResult::error("Failed to get view base table metadata: " + view_base_table);
-            }
-
-            std::string result = "Table: " + table_name + " (view on " + view_base_table + ")\n";
-            result += "--------------------\n";
-
-            auto iter = storage_engine_->scan(view_base_table);
-            int count = 0;
-
-            // Get WHERE conditions from both the view query and the current query
-            const sql::Expression* view_where = view_select->whereCondition();
-            const sql::Expression* current_where = stmt ? stmt->whereCondition() : nullptr;
-
-            while (iter.hasNext()) {
-                auto tuple = iter.getNext();
-
-                // Apply view's WHERE condition
-                if (view_where && !Executor::evaluateWhereCondition(tuple, view_where, &table_meta->schema)) {
-                    continue;
+                if (!view_ast || !view_ast->statement()) {
+                    return ExecutionResult::error("Failed to parse view definition");
                 }
 
-                // Apply current query's WHERE condition
-                if (current_where && !Executor::evaluateWhereCondition(tuple, current_where, &table_meta->schema)) {
-                    continue;
+                auto view_select = dynamic_cast<sql::SelectStmt*>(view_ast->statement());
+                if (!view_select) {
+                    return ExecutionResult::error("View definition is not a SELECT statement");
                 }
 
-                // For view, use the view's select list
-                result += Executor::formatTuple(tuple, view_select->selectList(), &table_meta->schema) + "\n";
-                count++;
+                // Get the base table from the view's SELECT
+                std::string view_base_table = view_select->fromTable();
+                if (view_base_table.empty()) {
+                    return ExecutionResult::error("View has no base table");
+                }
+
+                // Check if base table exists
+                if (!storage_engine_->tableExists(view_base_table)) {
+                    return ExecutionResult::error("View base table does not exist: " + view_base_table);
+                }
+
+                auto table_meta = storage_engine_->getTable(view_base_table);
+                if (!table_meta) {
+                    return ExecutionResult::error("Failed to get view base table metadata: " + view_base_table);
+                }
+
+                std::string result = "Table: " + table_name + " (view on " + view_base_table + ")\n";
+                result += "--------------------\n";
+
+                auto iter = storage_engine_->scan(view_base_table);
+                int count = 0;
+
+                // Get WHERE conditions from both the view query and the current query
+                const sql::Expression* view_where = view_select->whereCondition();
+                const sql::Expression* current_where = stmt ? stmt->whereCondition() : nullptr;
+
+                while (iter.hasNext()) {
+                    auto tuple = iter.getNext();
+
+                    // Apply view's WHERE condition
+                    if (view_where && !Executor::evaluateWhereCondition(tuple, view_where, &table_meta->schema)) {
+                        continue;
+                    }
+
+                    // Apply current query's WHERE condition
+                    if (current_where && !Executor::evaluateWhereCondition(tuple, current_where, &table_meta->schema)) {
+                        continue;
+                    }
+
+                    // For view, use the view's select list
+                    result += Executor::formatTuple(tuple, view_select->selectList(), &table_meta->schema) + "\n";
+                    count++;
+                }
+
+                result += "--------------------\n";
+                result += "Total rows: " + std::to_string(count);
+
+                return ExecutionResult::ok(result);
             }
-
-            result += "--------------------\n";
-            result += "Total rows: " + std::to_string(count);
-
-            return ExecutionResult::ok(result);
         }
 
         if (!storage_engine_->tableExists(table_name)) {
