@@ -152,7 +152,13 @@ bool StorageEngine::update(const std::string& table_name, const TID& tid, const 
     if (!new_tid.isValid()) {
         // 插入失败，尝试恢复旧元组
         LOG_ERROR("Failed to insert new tuple during update");
-        // 注意：这里简化处理，实际应该通过WAL恢复 TODO: 
+        // 实际上，我们可以尝试将旧元组重新插入来恢复
+        TID recovered_tid = table_manager_->insertTuple(table_name, old_tuple);
+        if (!recovered_tid.isValid()) {
+            LOG_ERROR("Failed to recover old tuple after update failure - data may be lost!");
+        } else {
+            LOG_INFO("Recovered old tuple at " << recovered_tid.toString());
+        } 
         return false;
     }
 
@@ -327,6 +333,18 @@ bool StorageEngine::createIndex(const std::string& index_name, const std::string
         return false;
     }
 
+    // 获取表并检查列是否存在
+    auto table = table_manager_->getTable(table_name);
+    if (!table) {
+        LOG_ERROR("Failed to get table " << table_name);
+        return false;
+    }
+
+    if (!table->schema.columnExists(column_name)) {
+        LOG_ERROR("Column " << column_name << " does not exist in table " << table_name);
+        return false;
+    }
+
     // 创建索引
     if (!index_manager_->createIndex(index_name, table_name, column_name, is_unique)) {
         LOG_ERROR("Failed to create index " << index_name);
@@ -337,12 +355,6 @@ bool StorageEngine::createIndex(const std::string& index_name, const std::string
     auto index = index_manager_->getIndex(index_name);
     if (!index) {
         LOG_ERROR("Failed to get created index " << index_name);
-        return false;
-    }
-
-    auto table = table_manager_->getTable(table_name);
-    if (!table) {
-        LOG_ERROR("Failed to get table " << table_name);
         return false;
     }
 

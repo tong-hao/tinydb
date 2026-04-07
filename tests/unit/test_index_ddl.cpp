@@ -123,8 +123,11 @@ TEST_F(IndexDDLTest, CreateIndexOnNonExistentTable) {
 
 // 测试在不存在列上创建索引
 TEST_F(IndexDDLTest, CreateIndexOnNonExistentColumn) {
-    // 实际实现应该检查列是否存在
-    // 这里简化处理，假设列存在性检查在执行器中 TODO: 
+    // 尝试在不存在的列上创建索引，应该失败
+    EXPECT_FALSE(storage_->createIndex("idx_test", "users", "non_existent_column", false));
+
+    // 验证索引确实没有被创建
+    EXPECT_EQ(storage_->getIndex("idx_test"), nullptr);
 }
 
 // 测试多列索引（目前不支持，应创建多个单列索引）
