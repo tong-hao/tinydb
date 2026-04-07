@@ -5,21 +5,21 @@
 namespace tinydb {
 namespace storage {
 
-// 获取数据类型大小
+// Get data type size
 size_t getTypeSize(DataType type) {
     switch (type) {
         case DataType::INT32: return 4;
         case DataType::INT64: return 8;
         case DataType::FLOAT: return 4;
         case DataType::DOUBLE: return 8;
-        case DataType::DECIMAL: return 8;  // DECIMAL存储为DOUBLE
+        case DataType::DECIMAL: return 8;  // DECIMAL stored as DOUBLE
         case DataType::BOOL: return 1;
         case DataType::NULL_TYPE: return 0;
         default: return 0;
     }
 }
 
-// 检查类型是否为定长
+// Check if type is fixed-length
 bool isFixedLength(DataType type) {
     return type == DataType::INT32 ||
            type == DataType::INT64 ||
@@ -42,7 +42,7 @@ static bool caseInsensitiveCompare(const std::string& a, const std::string& b) {
     return true;
 }
 
-// Schema实现
+// Schema implementation
 int Schema::findColumnIndex(const std::string& name) const {
     for (size_t i = 0; i < columns_.size(); ++i) {
         if (caseInsensitiveCompare(columns_[i].name, name)) {
@@ -60,12 +60,12 @@ const ColumnDef* Schema::getColumn(const std::string& name) const {
     return nullptr;
 }
 
-// 检查列是否存在
+// Check if column exists
 bool Schema::columnExists(const std::string& name) const {
     return findColumnIndex(name) >= 0;
 }
 
-// 删除列
+// Remove column
 bool Schema::removeColumn(const std::string& name) {
     int idx = findColumnIndex(name);
     if (idx < 0) {
@@ -93,20 +93,20 @@ size_t Schema::getRowMaxSize() const {
     for (const auto& col : columns_) {
         size += col.getStorageSize();
     }
-    // 加上NULL位图（每列1位，向上取整到字节）
+    // Add NULL bitmap (1 bit per column, rounded up to bytes)
     size += (columns_.size() + 7) / 8;
     return size;
 }
 
 std::vector<uint8_t> Schema::serialize() const {
     std::vector<uint8_t> result;
-    // 列数
+    // Column count
     uint32_t col_count = columns_.size();
     result.resize(sizeof(col_count));
     std::memcpy(result.data(), &col_count, sizeof(col_count));
 
     for (const auto& col : columns_) {
-        // 列名长度
+        // Column name length
         uint32_t name_len = col.name.size();
         size_t old_size = result.size();
         result.resize(old_size + sizeof(name_len) + name_len + sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint8_t) * 2);
@@ -178,17 +178,17 @@ bool Schema::deserialize(const uint8_t* data, size_t size) {
     return true;
 }
 
-// Field实现
+// Field implementation
 Field::Field(const std::string& val, DataType type) : type_(type), is_null_(false) {
     if (type == DataType::CHAR || type == DataType::VARCHAR) {
         data_ = val;
     } else if (type == DataType::DECIMAL) {
-        // DECIMAL 类型：将字符串转换为 double 存储
+        // DECIMAL type: convert string to double for storage
         try {
             double dval = std::stod(val);
             data_.assign(reinterpret_cast<const char*>(&dval), sizeof(dval));
         } catch (...) {
-            // 转换失败，设为 NULL
+            // Conversion failed, set to NULL
             is_null_ = true;
         }
     }
@@ -225,7 +225,7 @@ double Field::getDouble() const {
     if (is_null_ || data_.size() != 8) {
         return 0.0;
     }
-    // DECIMAL 和 DOUBLE 都使用 getDouble
+    // Both DECIMAL and DOUBLE use getDouble
     if (type_ != DataType::DOUBLE && type_ != DataType::DECIMAL) {
         return 0.0;
     }
@@ -252,19 +252,19 @@ std::string Field::getString() const {
 std::vector<uint8_t> Field::serialize() const {
     std::vector<uint8_t> result;
 
-    // 类型
+    // Type
     result.push_back(static_cast<uint8_t>(type_));
 
-    // NULL标志
+    // NULL flag
     result.push_back(is_null_ ? 1 : 0);
 
     if (!is_null_) {
-        // 数据长度
+        // Data length
         uint32_t len = data_.size();
         result.resize(result.size() + sizeof(len));
         std::memcpy(result.data() + 2, &len, sizeof(len));
 
-        // 数据
+        // Data
         size_t old_size = result.size();
         result.resize(old_size + len);
         std::memcpy(result.data() + old_size, data_.data(), len);
@@ -302,7 +302,7 @@ std::string Field::toString() const {
         case DataType::INT64: return std::to_string(getInt64());
         case DataType::FLOAT: return std::to_string(getFloat());
         case DataType::DOUBLE: return std::to_string(getDouble());
-        case DataType::DECIMAL: return std::to_string(getDouble());  // DECIMAL存储为DOUBLE
+        case DataType::DECIMAL: return std::to_string(getDouble());  // DECIMAL stored as DOUBLE
         case DataType::BOOL: return getBool() ? "true" : "false";
         case DataType::CHAR:
         case DataType::VARCHAR: return "'" + getString() + "'";
@@ -310,7 +310,7 @@ std::string Field::toString() const {
     }
 }
 
-// Tuple实现
+// Tuple implementation
 void Tuple::setField(size_t idx, const Field& field) {
     if (idx >= fields_.size()) {
         fields_.resize(idx + 1);
@@ -327,7 +327,7 @@ std::vector<uint8_t> Tuple::serialize() const {
 
     size_t col_count = schema_->getColumnCount();
 
-    // NULL位图
+    // NULL bitmap
     size_t null_bitmap_size = (col_count + 7) / 8;
     std::vector<uint8_t> null_bitmap(null_bitmap_size, 0);
 
@@ -337,19 +337,19 @@ std::vector<uint8_t> Tuple::serialize() const {
         }
     }
 
-    // 写入NULL位图
+    // Write NULL bitmap
     result.insert(result.end(), null_bitmap.begin(), null_bitmap.end());
 
-    // 写入字段数据
+    // Write field data
     for (size_t i = 0; i < fields_.size() && i < col_count; ++i) {
         if (!fields_[i].isNull()) {
             auto field_data = fields_[i].serialize();
-            // 跳过类型和NULL标志（前2字节），只写长度和数据
+            // Skip type and NULL flag (first 2 bytes), write only length and data
             if (field_data.size() > 6) {
                 result.insert(result.end(), field_data.begin() + 2, field_data.end());
             }
         } else {
-            // NULL值只写类型和NULL标志
+            // NULL value: write only type and NULL flag
             result.push_back(static_cast<uint8_t>(schema_->getColumn(i).type));
             result.push_back(1);
         }
@@ -367,7 +367,7 @@ bool Tuple::deserialize(const uint8_t* data, size_t size) {
 
     if (size < null_bitmap_size) return false;
 
-    // 读取NULL位图
+    // Read NULL bitmap
     std::vector<uint8_t> null_bitmap(ptr, ptr + null_bitmap_size);
     ptr += null_bitmap_size;
 
@@ -380,7 +380,7 @@ bool Tuple::deserialize(const uint8_t* data, size_t size) {
         if (is_null) {
             fields_.emplace_back();
         } else {
-            // 读取字段：长度(4字节) + 数据
+            // Read field: length (4 bytes) + data
             if (static_cast<size_t>(ptr - data) + 4 > size) return false;
 
             uint32_t len;
@@ -389,7 +389,7 @@ bool Tuple::deserialize(const uint8_t* data, size_t size) {
 
             if (static_cast<size_t>(ptr - data) + len > size) return false;
 
-            // 构造临时序列化数据用于反序列化
+            // Construct temporary serialized data for deserialization
             std::vector<uint8_t> field_data;
             field_data.push_back(static_cast<uint8_t>(type));
             field_data.push_back(0);  // not null

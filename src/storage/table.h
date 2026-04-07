@@ -11,61 +11,61 @@
 namespace tinydb {
 namespace storage {
 
-// 表元数据（对应tn_class）
+// Table metadata (corresponds to tn_class)
 struct TableMeta {
-    uint32_t table_id;              // 表ID
-    std::string table_name;         // 表名
-    std::string schema_name;        // 模式名（默认public）
-    PageId first_page_id;           // 第一个数据页
-    PageId last_page_id;            // 最后一个数据页
-    uint32_t tuple_count;           // 元组数量
-    uint32_t page_count;            // 页数量
-    uint32_t next_tuple_id;         // 下一个元组ID
-    Schema schema;                  // 表结构
+    uint32_t table_id;              // Table ID
+    std::string table_name;         // Table name
+    std::string schema_name;        // Schema name (default: public)
+    PageId first_page_id;           // First data page
+    PageId last_page_id;            // Last data page
+    uint32_t tuple_count;           // Number of tuples
+    uint32_t page_count;            // Number of pages
+    uint32_t next_tuple_id;         // Next tuple ID
+    Schema schema;                  // Table schema
 
     TableMeta() : table_id(0), first_page_id(INVALID_PAGE_ID), last_page_id(INVALID_PAGE_ID),
                   tuple_count(0), page_count(0), next_tuple_id(1) {}
 
-    // 序列化
+    // Serialize
     std::vector<uint8_t> serialize() const;
     bool deserialize(const uint8_t* data, size_t size);
 };
 
-// 列元数据（对应tn_attribute）
+// Column metadata (corresponds to tn_attribute)
 struct ColumnMeta {
-    uint32_t table_id;              // 所属表ID
-    std::string column_name;        // 列名
-    uint16_t column_id;             // 列号
-    DataType data_type;             // 数据类型
-    uint32_t type_length;           // 类型长度
-    bool is_nullable;               // 是否可为NULL
-    bool is_primary_key;            // 是否主键
-    int32_t default_value_offset;   // 默认值偏移（暂不支持）
+    uint32_t table_id;              // Parent table ID
+    std::string column_name;        // Column name
+    uint16_t column_id;             // Column number
+    DataType data_type;             // Data type
+    uint32_t type_length;           // Type length
+    bool is_nullable;               // Whether nullable
+    bool is_primary_key;            // Whether primary key
+    int32_t default_value_offset;   // Default value offset (not supported yet)
 
     ColumnMeta() : table_id(0), column_id(0), data_type(DataType::INVALID),
                    type_length(0), is_nullable(true), is_primary_key(false),
                    default_value_offset(-1) {}
 
-    // 从ColumnDef构造
+    // Construct from ColumnDef
     explicit ColumnMeta(const ColumnDef& def);
 
-    // 序列化
+    // Serialize
     std::vector<uint8_t> serialize() const;
     bool deserialize(const uint8_t* data, size_t size);
 };
 
-// 表迭代器
+// Table iterator
 class TableIterator {
 public:
     TableIterator(BufferPoolManager* buffer_pool, PageId start_page, const Schema* schema);
 
-    // 是否还有下一行
+    // Check if there is a next row
     bool hasNext();
 
-    // 获取当前行
+    // Get current row
     Tuple getNext();
 
-    // 获取当前TID
+    // Get current TID
     TID getCurrentTID() const { return current_tid_; }
 
 private:

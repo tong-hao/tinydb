@@ -11,7 +11,7 @@ Connection::Connection(int socket_fd)
     : socket_fd_(socket_fd)
     , state_(ConnectionState::CONNECTED) {
     LOG_DEBUG("Connection created, fd=" << socket_fd_);
-    // 设置 socket 为非阻塞模式，以便可以检查 running_ 状态
+    // Set socket to non-blocking mode to allow checking running_ state
     int flags = fcntl(socket_fd_, F_GETFL, 0);
     if (flags >= 0) {
         fcntl(socket_fd_, F_SETFL, flags | O_NONBLOCK);
@@ -59,7 +59,7 @@ void Connection::run() {
         FD_SET(socket_fd_, &read_fds);
 
         struct timeval timeout;
-        timeout.tv_sec = 1;  // 1秒超时
+        timeout.tv_sec = 1;  // 1 second timeout
         timeout.tv_usec = 0;
 
         int ret = ::select(socket_fd_ + 1, &read_fds, nullptr, nullptr, &timeout);
@@ -72,7 +72,7 @@ void Connection::run() {
         }
 
         if (ret == 0) {
-            // 超时，继续循环检查 state_
+            // Timeout, continue loop to check state_
             continue;
         }
 
@@ -90,7 +90,7 @@ void Connection::run() {
             } else if (err.code() == ErrorCode::E_NETWORK_ERROR &&
                        (err.toString().find("Resource temporarily unavailable") != std::string::npos ||
                         err.toString().find("EAGAIN") != std::string::npos)) {
-                // 非阻塞模式下没有数据可读，继续循环
+                // No data readable in non-blocking mode, continue
                 continue;
             } else {
                 LOG_ERROR("Read message error: " << err.toString());
@@ -175,7 +175,7 @@ Error Connection::readExact(byte_t* buffer, size_t length) {
                 continue;
             }
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // 非阻塞模式下没有数据可读
+                // No data readable in non-blocking mode
                 return Error(ErrorCode::E_NETWORK_ERROR, "EAGAIN");
             }
             return Error(ErrorCode::E_NETWORK_ERROR, strerror(errno));

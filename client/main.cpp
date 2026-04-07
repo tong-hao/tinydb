@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
     uint16_t port = 5432;
     std::string sql;
 
-    // 解析命令行参数
+    // Parse command line arguments
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--host") == 0) {
             if (i + 1 < argc) {
@@ -45,10 +45,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // 创建客户端
+    // Create client
     Client client;
 
-    // 连接到服务器
+    // Connect to server
     std::cout << "Connecting to " << host << ":" << port << "..." << std::endl;
     if (!client.connect(host, port)) {
         std::cerr << "Failed to connect: " << client.lastError() << std::endl;
@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Connected. Executing: " << sql << std::endl;
 
-    // 执行 SQL
+    // Execute SQL
     auto result = client.execute(sql);
 
     if (result.success()) {
@@ -68,7 +68,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // 断开连接
+    // Disconnect
     client.disconnect();
     return 0;
 }

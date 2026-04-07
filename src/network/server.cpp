@@ -19,14 +19,14 @@ Server::~Server() {
 }
 
 void Server::run() {
-    // 创建 socket
+    // Create socket
     listen_fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
     if (listen_fd_ < 0) {
         LOG_ERROR("Failed to create socket: " << strerror(errno));
         return;
     }
 
-    // 设置地址重用
+    // Set address reuse
     int reuse = 1;
     if (::setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
         LOG_ERROR("Failed to set SO_REUSEADDR: " << strerror(errno));
@@ -35,7 +35,7 @@ void Server::run() {
         return;
     }
 
-    // 绑定地址
+    // Bind address
     struct sockaddr_in addr;
     std::memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -49,7 +49,7 @@ void Server::run() {
         return;
     }
 
-    // 开始监听
+    // Start listening
     if (::listen(listen_fd_, 128) < 0) {
         LOG_ERROR("Failed to listen: " << strerror(errno));
         ::close(listen_fd_);
@@ -72,7 +72,7 @@ void Server::stop() {
 
     LOG_INFO("Stopping server...");
 
-    // 先关闭监听 socket，这样 acceptLoop 中的 select 会返回
+    // Close listening socket first so select in acceptLoop returns
     int fd = listen_fd_;
     listen_fd_ = -1;
     if (fd >= 0) {
@@ -80,17 +80,17 @@ void Server::stop() {
         ::close(fd);
     }
 
-    // 等待acceptLoop结束
+    // Wait for acceptLoop to finish
     LOG_INFO("Waiting for acceptLoop to finish...");
-    // 短暂等待确保acceptLoop看到running_变化
+    // Brief wait to ensure acceptLoop sees running_ change
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-    // 等待所有客户端线程结束（带超时）
+    // Wait for all client threads to finish (with timeout)
     std::lock_guard<std::mutex> lock(threads_mutex_);
     LOG_INFO("Joining " << client_threads_.size() << " client threads");
     for (auto& t : client_threads_) {
         if (t.joinable()) {
-            // 短暂等待线程完成
+            // Brief wait for thread completion
             t.join();
         }
     }
@@ -102,7 +102,7 @@ void Server::stop() {
 void Server::acceptLoop() {
     LOG_INFO("acceptLoop started");
     while (running_.load()) {
-        // 使用 select 来检查是否有新的连接，这样可以在超时后检查 running_ 状态
+        // Use select to check for new connections, allowing timeout to check running_ state
         fd_set read_fds;
         FD_ZERO(&read_fds);
 
@@ -114,7 +114,7 @@ void Server::acceptLoop() {
         FD_SET(fd, &read_fds);
 
         struct timeval timeout;
-        timeout.tv_sec = 1;  // 1秒超时
+        timeout.tv_sec = 1;  // 1 second timeout
         timeout.tv_usec = 0;
 
         int ret = ::select(fd + 1, &read_fds, nullptr, nullptr, &timeout);
@@ -128,7 +128,7 @@ void Server::acceptLoop() {
         }
 
         if (ret == 0) {
-            // 超时，继续循环检查 running_
+            // Timeout, continue loop to check running_
             continue;
         }
 
@@ -153,11 +153,11 @@ void Server::acceptLoop() {
 
         LOG_INFO("New connection from " << inet_ntoa(client_addr.sin_addr) << ":" << ntohs(client_addr.sin_port));
 
-        // 创建新线程处理客户端
+        // Create new thread to handle client
         std::lock_guard<std::mutex> lock(threads_mutex_);
         client_threads_.emplace_back(&Server::handleClient, this, Connection(client_fd));
 
-        // 清理已完成的线程
+        // Clean up completed threads
         for (auto it = client_threads_.begin(); it != client_threads_.end();) {
             if (it->joinable()) {
                 ++it;

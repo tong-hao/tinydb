@@ -11,7 +11,7 @@
 namespace tinydb {
 namespace network {
 
-// 连接状态
+// Connection state
 enum class ConnectionState {
     CONNECTING,
     CONNECTED,
@@ -19,7 +19,7 @@ enum class ConnectionState {
     CLOSED
 };
 
-// 连接类
+// Connection class
 class Connection {
 public:
     using MessageHandler = std::function<void(MessageType, const buffer_t&)>;
@@ -28,40 +28,40 @@ public:
     Connection(int socket_fd);
     ~Connection();
 
-    // 禁止拷贝
+    // Disable copy
     Connection(const Connection&) = delete;
     Connection& operator=(const Connection&) = delete;
 
-    // 允许移动
+    // Allow move
     Connection(Connection&& other) noexcept;
     Connection& operator=(Connection&& other) noexcept;
 
-    // 启动消息处理循环（阻塞）
+    // Start message processing loop (blocking)
     void run();
 
-    // 发送消息
+    // Send message
     Error sendMessage(MessageType type, const buffer_t& body);
     Error sendMessage(MessageType type);
 
-    // 关闭连接
+    // Close connection
     void close();
 
-    // 获取状态
+    // Get status
     ConnectionState state() const { return state_.load(); }
     int socketFd() const { return socket_fd_; }
 
-    // 设置回调
+    // Set callbacks
     void setMessageHandler(MessageHandler handler) { message_handler_ = std::move(handler); }
     void setCloseHandler(CloseHandler handler) { close_handler_ = std::move(handler); }
 
 private:
-    // 读取完整消息
+    // Read complete message
     Error readMessage(MessageType& type, buffer_t& body);
 
-    // 读取指定字节数
+    // Read exact number of bytes
     Error readExact(byte_t* buffer, size_t length);
 
-    // 发送指定字节数
+    // Send exact number of bytes
     Error sendExact(const byte_t* buffer, size_t length);
 
     int socket_fd_;

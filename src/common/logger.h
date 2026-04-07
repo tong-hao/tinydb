@@ -39,7 +39,7 @@ private:
     std::mutex mutex_;
 };
 
-// 日志宏
+// Log macros
 #define LOG_DEBUG(msg) do { \
     if (tinydb::Logger::instance().level() <= tinydb::LogLevel::DEBUG) { \
         std::ostringstream oss; \

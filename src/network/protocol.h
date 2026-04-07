@@ -9,7 +9,7 @@
 namespace tinydb {
 namespace network {
 
-// 协议消息头
+// Protocol message header
 struct MessageHeader {
     uint8_t magic;
     uint8_t version;
@@ -26,7 +26,7 @@ struct MessageHeader {
         , reserved(0)
         , body_length(0) {}
 
-    // 序列化到缓冲区
+    // Serialize to buffer
     void serialize(byte_t* buffer) const {
         buffer[0] = magic;
         buffer[1] = version;
@@ -36,7 +36,7 @@ struct MessageHeader {
         *reinterpret_cast<uint32_t*>(buffer + 8) = htonl(body_length);
     }
 
-    // 从缓冲区反序列化
+    // Deserialize from buffer
     bool deserialize(const byte_t* buffer) {
         magic = buffer[0];
         version = buffer[1];
@@ -47,7 +47,7 @@ struct MessageHeader {
         return true;
     }
 
-    // 验证消息头
+    // Validate message header
     Error validate() const {
         if (magic != PROTOCOL_MAGIC) {
             return Error(ErrorCode::E_INVALID_MAGIC);
@@ -62,14 +62,14 @@ struct MessageHeader {
     }
 };
 
-// SQL 命令消息
+// SQL command message
 struct SQLCommandMessage {
     std::string sql;
 
     SQLCommandMessage() = default;
     explicit SQLCommandMessage(std::string sql_str) : sql(std::move(sql_str)) {}
 
-    // 序列化
+    // Serialize
     buffer_t serialize() const {
         buffer_t buffer;
         uint32_t sql_len = htonl(static_cast<uint32_t>(sql.length()));
@@ -89,7 +89,7 @@ struct SQLCommandMessage {
     }
 };
 
-// SQL 响应消息
+// SQL response message
 struct SQLResponseMessage {
     uint8_t status;  // 0=OK, 1=Error
     std::string message;
@@ -105,7 +105,7 @@ struct SQLResponseMessage {
         return SQLResponseMessage(1, msg);
     }
 
-    // 序列化
+    // Serialize
     buffer_t serialize() const {
         buffer_t buffer;
         uint32_t msg_len = htonl(static_cast<uint32_t>(message.length()));
@@ -116,7 +116,7 @@ struct SQLResponseMessage {
         return buffer;
     }
 
-    // 反序列化
+    // Deserialize
     bool deserialize(const byte_t* data, uint32_t length) {
         if (length < 5) return false;
         status = data[0];
@@ -127,7 +127,7 @@ struct SQLResponseMessage {
     }
 };
 
-// 错误消息
+// Error message
 struct ErrorMessage {
     uint32_t error_code;
     std::string message;
@@ -136,7 +136,7 @@ struct ErrorMessage {
     ErrorMessage(ErrorCode code, std::string msg)
         : error_code(static_cast<uint32_t>(code)), message(std::move(msg)) {}
 
-    // 序列化
+    // Serialize
     buffer_t serialize() const {
         buffer_t buffer;
         uint32_t code_net = htonl(error_code);
@@ -148,7 +148,7 @@ struct ErrorMessage {
         return buffer;
     }
 
-    // 反序列化
+    // Deserialize
     bool deserialize(const byte_t* data, uint32_t length) {
         if (length < 8) return false;
         error_code = ntohl(*reinterpret_cast<const uint32_t*>(data));
@@ -159,7 +159,7 @@ struct ErrorMessage {
     }
 };
 
-// 构建完整消息
+// Build complete message
 buffer_t buildMessage(MessageType type, const buffer_t& body);
 buffer_t buildMessage(MessageType type);
 

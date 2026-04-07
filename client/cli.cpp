@@ -14,7 +14,7 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 
-// 支持 readline 库（如果可用）
+// Support readline library (if available)
 #ifdef HAS_READLINE
 #include <readline/readline.h>
 #include <readline/history.h>
@@ -22,7 +22,7 @@
 
 using namespace tinydb::client;
 
-// ANSI 颜色代码
+// ANSI color codes
 namespace Color {
     const char* RESET = "\033[0m";
     const char* RED = "\033[31m";
@@ -35,7 +35,7 @@ namespace Color {
     const char* BOLD = "\033[1m";
 }
 
-// 全局客户端对象
+// Global client object
 Client g_client;
 std::string g_current_database = "tinydb";
 std::string g_current_user = "tinydb";
@@ -44,7 +44,7 @@ bool g_use_color = true;
 bool g_expanded_output = false;
 int g_pager_enabled = true;
 
-// 打印带颜色的文本
+// Print colored text
 void printColored(const char* color, const std::string& text) {
     if (g_use_color) {
         std::cout << color << text << Color::RESET;
@@ -53,16 +53,16 @@ void printColored(const char* color, const std::string& text) {
     }
 }
 
-// 获取终端宽度
+// Get terminal width
 int getTerminalWidth() {
     struct winsize w;
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0) {
         return w.ws_col;
     }
-    return 80; // 默认宽度
+    return 80; // Default width
 }
 
-// 打印水平分隔线
+// Print horizontal separator
 void printSeparator(const std::vector<int>& col_widths) {
     std::cout << "+";
     for (size_t i = 0; i < col_widths.size(); ++i) {
@@ -72,7 +72,7 @@ void printSeparator(const std::vector<int>& col_widths) {
     std::cout << "\n";
 }
 
-// 打印表格行
+// Print table row
 void printTableRow(const std::vector<std::string>& values,
                    const std::vector<int>& col_widths,
                    bool is_header = false) {
@@ -90,7 +90,7 @@ void printTableRow(const std::vector<std::string>& values,
     std::cout << "\n";
 }
 
-// 解析简单的 CSV 或表格结果并格式化显示
+// Parse simple CSV or table result and display formatted
 void displayResult(const std::string& result_str) {
     if (result_str.empty()) {
         printColored(Color::GREEN, "OK\n");
@@ -109,23 +109,23 @@ void displayResult(const std::string& result_str) {
     std::vector<std::vector<std::string>> rows;
     std::vector<int> col_widths;
 
-    // 解析所有行
+    // Parse all rows
     while (std::getline(iss, line)) {
         std::vector<std::string> fields;
         std::istringstream line_iss(line);
         std::string field;
 
-        // 尝试按制表符分割
+        // Try splitting by tab
         while (std::getline(line_iss, field, '\t')) {
             fields.push_back(field);
         }
 
         if (fields.empty()) {
-            // 尝试按逗号分割
+            // Try splitting by comma
             line_iss.clear();
             line_iss.str(line);
             while (std::getline(line_iss, field, ',')) {
-                // 去除空格
+                // Remove whitespace
                 field.erase(0, field.find_first_not_of(" \t"));
                 field.erase(field.find_last_not_of(" \t") + 1);
                 fields.push_back(field);
@@ -135,13 +135,13 @@ void displayResult(const std::string& result_str) {
         if (!fields.empty()) {
             rows.push_back(fields);
 
-            // 更新列宽
+            // Update column widths
             if (col_widths.size() < fields.size()) {
                 col_widths.resize(fields.size(), 0);
             }
             for (size_t i = 0; i < fields.size(); ++i) {
                 col_widths[i] = std::max(col_widths[i], static_cast<int>(fields[i].length()));
-                // 限制最大列宽
+                // Limit max column width
                 col_widths[i] = std::min(col_widths[i], 50);
             }
         }
@@ -152,7 +152,7 @@ void displayResult(const std::string& result_str) {
         return;
     }
 
-    // 打印表格
+    // Print table
     printSeparator(col_widths);
     for (size_t i = 0; i < rows.size(); ++i) {
         printTableRow(rows[i], col_widths, i == 0);
@@ -165,7 +165,7 @@ void displayResult(const std::string& result_str) {
     std::cout << "(" << (rows.size() - 1) << " rows)\n";
 }
 
-// 显示扩展格式（每行一个字段）
+// Display expanded format (one field per line)
 void displayExpandedResult(const std::string& result_str) {
     if (result_str.empty()) {
         printColored(Color::GREEN, "OK\n");
@@ -178,7 +178,7 @@ void displayExpandedResult(const std::string& result_str) {
     std::vector<std::vector<std::string>> rows;
     int row_num = 0;
 
-    // 解析
+    // Parse
     while (std::getline(iss, line)) {
         std::vector<std::string> fields;
         std::istringstream line_iss(line);
@@ -196,7 +196,7 @@ void displayExpandedResult(const std::string& result_str) {
             rows.push_back(fields);
             row_num++;
 
-            // 打印扩展格式
+            // Print expanded format
             std::cout << "-[" << row_num << "]-------------------------\n";
             for (size_t i = 0; i < fields.size() && i < headers.size(); ++i) {
                 if (g_use_color) {
@@ -214,10 +214,10 @@ void displayExpandedResult(const std::string& result_str) {
     std::cout << "(" << rows.size() << " rows)\n";
 }
 
-// 元命令处理
+// Meta command processing
 bool handleMetaCommand(const std::string& cmd) {
     std::string trimmed = cmd;
-    // 去除前后空格
+    // Remove leading and trailing whitespace
     trimmed.erase(0, trimmed.find_first_not_of(" \t"));
     trimmed.erase(trimmed.find_last_not_of(" \t") + 1);
 
@@ -229,15 +229,15 @@ bool handleMetaCommand(const std::string& cmd) {
     std::string meta;
     iss >> meta;
 
-    // \q - 退出
+    // \q - Quit
     if (meta == "\\q" || meta == "\\quit") {
         g_running = false;
         return true;
     }
 
-    // \dt - 列出表
+    // \dt - List tables
     if (meta == "\\dt" || meta == "\\dt+") {
-        // 查询 tn_tables 系统视图获取真实表列表
+        // Query tn_tables system view to get real table list
         auto result = g_client.execute("SELECT schemaname, tablename, tableowner, tablespace "
                                        "FROM tn_tables WHERE schemaname = 'public'");
         if (!result.success()) {
@@ -249,8 +249,8 @@ bool handleMetaCommand(const std::string& cmd) {
         std::cout << " Schema | Name | Type | Owner \n";
         std::cout << "--------+------+------+-------\n";
 
-        // 解析结果并格式化输出
-        // executor 返回格式:
+        // Parse result and format output
+        // executor returns format:
         // Table: tn_tables
         // --------------------
         // schemaname\ttablename\ttableowner\ttablespace
@@ -262,21 +262,21 @@ bool handleMetaCommand(const std::string& cmd) {
         bool found_header = false;
         int row_count = 0;
         while (std::getline(iss, line)) {
-            // 跳过表名行
+            // Skip table name line
             if (line.find("Table:") == 0) continue;
-            // 跳过分隔线
+            // Skip separator line
             if (line.find("----") == 0) continue;
-            // 跳过空行
+            // Skip empty lines
             if (line.empty()) continue;
-            // 跳过行数统计行
+            // Skip row count statistics line
             if (line.find("Total rows:") == 0) continue;
-            // 跳过列名行（包含 schemaname）
+            // Skip column name line (contains schemaname)
             if (line.find("schemaname") != std::string::npos) {
                 found_header = true;
                 continue;
             }
 
-            // 解析制表符分隔的数据行
+            // Parse tab-separated data row
             std::istringstream line_iss(line);
             std::string schemaname, tablename, tableowner, tablespace;
             if (std::getline(line_iss, schemaname, '\t') &&
@@ -294,25 +294,25 @@ bool handleMetaCommand(const std::string& cmd) {
         return true;
     }
 
-    // \d - 描述表结构
+    // \d - Describe table structure
     if (meta == "\\d") {
         std::string table_name;
         iss >> table_name;
         if (table_name.empty()) {
-            // 如果没有指定表名，列出所有表
+            // If no table specified, list all tables
             return handleMetaCommand("\\dt");
         }
 
         std::cout << "Table \"public." << table_name << "\"\n";
         std::cout << " Column | Type | Nullable | Default \n";
         std::cout << "--------+------+----------+---------\n";
-        // 这里应该查询系统表获取真实数据
+        // This should query system tables to get real data
         std::cout << " id     | INT  | not null | nextval(...)\n";
         std::cout << " name   | TEXT | yes      | \n";
         return true;
     }
 
-    // \du - 列出用户
+    // \du - List users
     if (meta == "\\du" || meta == "\\du+") {
         std::cout << "List of roles\n";
         std::cout << " Role name | Attributes | Member of \n";
@@ -321,7 +321,7 @@ bool handleMetaCommand(const std::string& cmd) {
         return true;
     }
 
-    // \l - 列出数据库
+    // \l - List databases
     if (meta == "\\l" || meta == "\\l+") {
         std::cout << "List of databases\n";
         std::cout << " Name | Owner | Encoding | Collate | Ctype | Access privileges \n";
@@ -330,7 +330,7 @@ bool handleMetaCommand(const std::string& cmd) {
         return true;
     }
 
-    // \c - 切换数据库
+    // \c - Switch database
     if (meta == "\\c" || meta == "\\connect") {
         std::string dbname;
         iss >> dbname;
@@ -347,14 +347,14 @@ bool handleMetaCommand(const std::string& cmd) {
         return true;
     }
 
-    // \x - 切换扩展输出模式
+    // \x - Toggle expanded output mode
     if (meta == "\\x") {
         g_expanded_output = !g_expanded_output;
         std::cout << "Expanded display is " << (g_expanded_output ? "on" : "off") << ".\n";
         return true;
     }
 
-    // \timing - 切换计时
+    // \timing - Toggle timing
     if (meta == "\\timing") {
         static bool timing = false;
         timing = !timing;
@@ -362,7 +362,7 @@ bool handleMetaCommand(const std::string& cmd) {
         return true;
     }
 
-    // \pset - 设置输出选项
+    // \pset - Set output options
     if (meta == "\\pset") {
         std::string option, value;
         iss >> option >> value;
@@ -376,7 +376,7 @@ bool handleMetaCommand(const std::string& cmd) {
         return true;
     }
 
-    // \? - 帮助
+    // \? - Help
     if (meta == "\\?" || meta == "\\h") {
         std::cout << "General\n";
         std::cout << "  \\q                     quit\n";
@@ -392,12 +392,12 @@ bool handleMetaCommand(const std::string& cmd) {
         return true;
     }
 
-    // 未知命令
+    // Unknown command
     std::cout << "Invalid command \"" << meta << "\". Type \\? for help.\n";
     return true;
 }
 
-// 打印提示符
+// Print prompt
 void printPrompt() {
     if (g_use_color) {
         std::cout << Color::GREEN << g_current_database << Color::RESET
@@ -408,7 +408,7 @@ void printPrompt() {
     std::cout.flush();
 }
 
-// 打印多行输入提示符
+// Print multi-line input prompt
 void printMultiLinePrompt(int line_num) {
     std::string prompt = g_current_database + "(" + std::to_string(line_num) + ")";
     if (g_use_color) {
@@ -420,7 +420,7 @@ void printMultiLinePrompt(int line_num) {
     std::cout.flush();
 }
 
-// 读取一行输入（支持多行）
+// Read one line of input (supports multi-line)
 std::string readInputLine(bool& is_multiline) {
     std::string line;
 
@@ -445,11 +445,11 @@ std::string readInputLine(bool& is_multiline) {
     return line;
 }
 
-// 执行单个 SQL 命令
+// Execute single SQL command
 void executeCommand(const std::string& sql) {
     if (sql.empty()) return;
 
-    // 检查是否是元命令
+    // Check if it's a meta command
     std::string trimmed = sql;
     trimmed.erase(0, trimmed.find_first_not_of(" \t"));
     if (!trimmed.empty() && trimmed[0] == '\\') {
@@ -457,7 +457,7 @@ void executeCommand(const std::string& sql) {
         return;
     }
 
-    // 执行 SQL
+    // Execute SQL
     auto start = std::chrono::steady_clock::now();
     auto result = g_client.execute(sql);
     auto end = std::chrono::steady_clock::now();
@@ -476,7 +476,7 @@ void executeCommand(const std::string& sql) {
     }
 }
 
-// 主交互循环
+// Main interaction loop
 void interactiveLoop() {
     std::cout << "TinyDB interactive terminal\n";
     std::cout << "Type \\? for help.\n\n";
@@ -489,13 +489,13 @@ void interactiveLoop() {
         while (g_running) {
             std::string line = readInputLine(is_multiline);
 
-            // 检查 EOF
+            // Check for EOF
             if (line.empty() && std::cin.eof()) {
                 g_running = false;
                 break;
             }
 
-            // 检查元命令（只在第一行）
+            // Check meta command (only on first line)
             if (!is_multiline && !line.empty()) {
                 std::string trimmed = line;
                 trimmed.erase(0, trimmed.find_first_not_of(" \t"));
@@ -505,28 +505,28 @@ void interactiveLoop() {
                 }
             }
 
-            // 累加输入
+            // Accumulate input
             if (!accumulated.empty()) {
                 accumulated += " ";
             }
             accumulated += line;
 
-            // 检查语句是否完整（简单检查：以分号结尾）
+            // Check if statement is complete (simple check: ends with semicolon)
             std::string trimmed_line = line;
-            // 去除尾部空格
+            // Remove trailing whitespace
             size_t end = trimmed_line.find_last_not_of(" \t");
             if (end != std::string::npos) {
                 trimmed_line = trimmed_line.substr(0, end + 1);
             }
 
             if (!trimmed_line.empty() && trimmed_line.back() == ';') {
-                // 语句完整，执行
-                // 去掉末尾的分号
+                // Statement complete, execute
+                // Remove trailing semicolon
                 accumulated = accumulated.substr(0, accumulated.find_last_of(';'));
                 executeCommand(accumulated);
                 break;
             } else {
-                // 多行输入
+                // Multi-line input
                 is_multiline = true;
                 line_num++;
                 printMultiLinePrompt(line_num);
@@ -535,7 +535,7 @@ void interactiveLoop() {
     }
 }
 
-// 打印用法信息
+// Print usage information
 void printUsage(const char* program) {
     std::cout << "TinyDB Interactive Terminal (psql-like client)\n\n";
     std::cout << "Usage: " << program << " [options]\n";
@@ -556,7 +556,7 @@ void printUsage(const char* program) {
     std::cout << "  " << program << " -f script.sql\n";
 }
 
-// 从文件执行命令
+// Execute commands from file
 void executeFile(const std::string& filename) {
     std::ifstream file(filename);
     if (!file) {
@@ -571,27 +571,27 @@ void executeFile(const std::string& filename) {
     while (std::getline(file, line)) {
         line_num++;
 
-        // 去除注释
+        // Remove comments
         size_t comment_pos = line.find("--");
         if (comment_pos != std::string::npos) {
             line = line.substr(0, comment_pos);
         }
 
-        // 跳过空行
+        // Skip empty lines
         std::string trimmed = line;
         trimmed.erase(0, trimmed.find_first_not_of(" \t"));
         if (trimmed.empty()) continue;
 
-        // 累加
+        // Accumulate
         if (!accumulated.empty()) {
             accumulated += " ";
         }
         accumulated += trimmed;
 
-        // 检查语句是否完整
+        // Check if statement is complete
         size_t end = trimmed.find_last_not_of(" \t");
         if (end != std::string::npos && trimmed[end] == ';') {
-            // 执行完整语句
+            // Execute complete statement
             accumulated = accumulated.substr(0, accumulated.find_last_of(';'));
             std::cout << "=> " << accumulated << "\n";
             executeCommand(accumulated);
@@ -599,7 +599,7 @@ void executeFile(const std::string& filename) {
         }
     }
 
-    // 处理最后没有分号的语句
+    // Handle last statement without semicolon
     if (!accumulated.empty()) {
         executeCommand(accumulated);
     }
@@ -612,7 +612,7 @@ int main(int argc, char* argv[]) {
     std::string file_to_execute;
     bool list_databases = false;
 
-    // 解析命令行参数
+    // Parse command line arguments
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
 
@@ -639,12 +639,12 @@ int main(int argc, char* argv[]) {
             std::cout << "TinyDB client 1.0.0\n";
             return 0;
         } else if (arg[0] != '-') {
-            // 位置参数作为数据库名
+            // Positional argument as database name
             g_current_database = arg;
         }
     }
 
-    // 连接到服务器
+    // Connect to server
     std::cout << "Connecting to " << host << ":" << port << "...\n";
     if (!g_client.connect(host, port)) {
         std::cerr << "Failed to connect: " << g_client.lastError() << "\n";
@@ -653,7 +653,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Connected to TinyDB server.\n\n";
 
-    // 处理特殊模式
+    // Handle special modes
     if (list_databases) {
         handleMetaCommand("\\l");
         g_client.disconnect();
@@ -672,10 +672,10 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    // 进入交互模式
+    // Enter interactive mode
     interactiveLoop();
 
-    // 断开连接
+    // Disconnect
     std::cout << "\nGoodbye!\n";
     g_client.disconnect();
     return 0;

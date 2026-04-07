@@ -27,7 +27,7 @@ private:
     std::string message_;
 };
 
-// 错误码到字符串的转换
+// Convert error code to string
 std::string errorCodeToString(ErrorCode code);
 
 } // namespace tinydb

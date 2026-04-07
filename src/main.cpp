@@ -15,12 +15,12 @@ using namespace tinydb::network;
 using namespace tinydb::engine;
 using namespace tinydb::storage;
 
-// 全局实例，用于信号处理
+// Global instances for signal handling
 Server* g_server = nullptr;
 StorageEngine* g_storage = nullptr;
 std::unique_ptr<engine::SystemViewManager> g_system_view_manager_ptr;
 
-// 信号处理函数
+// Signal handler function
 void signalHandler(int sig) {
     if (sig == SIGINT || sig == SIGTERM) {
         LOG_INFO("Received signal " << sig << ", shutting down...");
@@ -30,7 +30,7 @@ void signalHandler(int sig) {
     }
 }
 
-// 请求处理器
+// Request handler class
 class SQLRequestHandler : public RequestHandler {
 public:
     SQLRequestHandler(StorageEngine* storage) : storage_(storage) {
@@ -49,10 +49,10 @@ public:
 
                 LOG_INFO("Received SQL: " << cmd.sql);
 
-                // 执行 SQL
+                // Execute SQL
                 auto result = executor_->execute(cmd.sql);
 
-                // 发送响应
+                // Send response
                 if (result.success()) {
                     SQLResponseMessage resp(0, result.message());
                     conn.sendMessage(MessageType::SQL_RESPONSE, resp.serialize());
@@ -99,7 +99,7 @@ int main(int argc, char* argv[]) {
     std::string data_dir = "./data";
     bool debug = false;
 
-    // 解析命令行参数
+    // Parse command line arguments
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--port") == 0) {
             if (i + 1 < argc) {
@@ -117,24 +117,24 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // 设置日志级别
+    // Set log level
     if (debug) {
         Logger::instance().setLevel(LogLevel::DEBUG);
     }
 
-    // 自动创建数据目录
+    // Auto-create data directory
     std::filesystem::path data_path(data_dir);
     if (!std::filesystem::exists(data_path)) {
         std::filesystem::create_directories(data_path);
     }
-    // 获取绝对路径
+    // Get absolute path
     std::string abs_data_dir = std::filesystem::absolute(data_path).string();
 
     LOG_INFO("TinyDB Server starting...");
     LOG_INFO("Port: " << port);
     LOG_INFO("Data directory: " << abs_data_dir);
 
-    // 初始化存储引擎
+    // Initialize storage engine
     StorageConfig storage_config;
     storage_config.db_file_path = abs_data_dir + "/tinydb.db";
     storage_config.wal_file_path = abs_data_dir + "/tinydb.wal";
@@ -151,27 +151,27 @@ int main(int argc, char* argv[]) {
     LOG_INFO("Database file: " << storage_config.db_file_path);
     LOG_INFO("WAL file: " << storage_config.wal_file_path);
 
-    // 初始化系统视图管理器
+    // Initialize system view manager
     g_system_view_manager_ptr = std::make_unique<engine::SystemViewManager>();
     g_system_view_manager_ptr->initialize(&storage, nullptr, nullptr, nullptr);
     engine::g_system_view_manager = g_system_view_manager_ptr.get();
     LOG_INFO("System view manager initialized");
 
-    // 设置信号处理
+    // Set up signal handlers
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
     std::signal(SIGPIPE, SIG_IGN);
 
-    // 创建请求处理器
+    // Create request handler
     SQLRequestHandler handler(&storage);
 
-    // 创建并启动服务器
+    // Create and start server
     Server server(port, &handler);
     g_server = &server;
 
     server.run();
 
-    // 关闭存储引擎
+    // Shutdown storage engine
     storage.shutdown();
 
     LOG_INFO("TinyDB Server stopped");

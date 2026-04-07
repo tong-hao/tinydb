@@ -9,13 +9,13 @@ using namespace tinydb::client;
 class IntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // 创建数据目录
+        // Create data directory
         system("mkdir -p /tmp/tinydb_test_data");
 
         // 启动服务器进程
         server_pid_ = fork();
         if (server_pid_ == 0) {
-            // 子进程：启动服务器
+            // Child process: start server
             // Try multiple paths to find the server binary
             execl("../../bin/tinydb-server", "tinydb-server", "-p", "5434", "-d", "/tmp/tinydb_test_data", nullptr);
             execl("../bin/tinydb-server", "tinydb-server", "-p", "5434", "-d", "/tmp/tinydb_test_data", nullptr);
@@ -23,18 +23,18 @@ protected:
             exit(1);
         }
 
-        // 等待服务器启动
+        // Wait for server to start
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
 
     void TearDown() override {
-        // 停止服务器
+        // Stop server
         if (server_pid_ > 0) {
             kill(server_pid_, SIGTERM);
             waitpid(server_pid_, nullptr, 0);
         }
 
-        // 清理数据目录
+        // Clean up data directory
         system("rm -rf /tmp/tinydb_test_data");
     }
 
@@ -106,7 +106,7 @@ TEST_F(IntegrationTest, MultipleCommands) {
     Client client;
     ASSERT_TRUE(client.connect("localhost", 5434));
 
-    // 创建多列表
+    // Create table with multiple columns
     auto result1 = client.execute(
         "CREATE TABLE employees ("
         "id INT, "
@@ -117,7 +117,7 @@ TEST_F(IntegrationTest, MultipleCommands) {
     EXPECT_TRUE(result1.success());
     EXPECT_NE(result1.message().find("CREATE"), std::string::npos);
 
-    // 插入多条数据
+    // Insert multiple records
     auto result2 = client.execute(
         "INSERT INTO employees VALUES (1, 'Alice', 'alice@example.com', 30)"
     );
@@ -134,10 +134,10 @@ TEST_F(IntegrationTest, MultipleCommands) {
     );
     EXPECT_TRUE(result4.success());
 
-    // 查询所有数据并验证
+    // Query all data and verify
     auto result5 = client.execute("SELECT * FROM employees");
     EXPECT_TRUE(result5.success());
-    // 验证返回结果中包含插入的数据
+    // Verify returned results contain inserted data
     EXPECT_NE(result5.message().find("Alice"), std::string::npos);
     EXPECT_NE(result5.message().find("alice@example.com"), std::string::npos);
     EXPECT_NE(result5.message().find("Bob"), std::string::npos);
@@ -145,25 +145,25 @@ TEST_F(IntegrationTest, MultipleCommands) {
     EXPECT_NE(result5.message().find("Charlie"), std::string::npos);
     EXPECT_NE(result5.message().find("charlie@example.com"), std::string::npos);
 
-    // 条件查询 - 按年龄筛选
+    // Conditional query - filter by age
     auto result6 = client.execute("SELECT * FROM employees WHERE age > 25");
     EXPECT_TRUE(result6.success());
     EXPECT_NE(result6.message().find("Alice"), std::string::npos);
     EXPECT_NE(result6.message().find("Charlie"), std::string::npos);
 
-    // 条件查询 - 按名字筛选
+    // Conditional query - filter by name
     auto result7 = client.execute("SELECT * FROM employees WHERE name = 'Bob'");
     EXPECT_TRUE(result7.success());
     EXPECT_NE(result7.message().find("Bob"), std::string::npos);
     EXPECT_NE(result7.message().find("bob@example.com"), std::string::npos);
 
-    // 投影查询 - 只查指定列
+    // Projection query - only select specific columns
     auto result8 = client.execute("SELECT name, age FROM employees");
     EXPECT_TRUE(result8.success());
     EXPECT_NE(result8.message().find("Alice"), std::string::npos);
     EXPECT_NE(result8.message().find("30"), std::string::npos);
 
-    // 删除表
+    // Drop table
     auto result9 = client.execute("DROP TABLE employees");
     EXPECT_TRUE(result9.success());
     EXPECT_NE(result9.message().find("DROP"), std::string::npos);
@@ -175,13 +175,13 @@ TEST_F(IntegrationTest, Heartbeat) {
     Client client;
     ASSERT_TRUE(client.connect("localhost", 5434));
 
-    // 发送多次心跳
+    // Send multiple heartbeats
     for (int i = 0; i < 5; ++i) {
         EXPECT_TRUE(client.ping());
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    // 心跳后仍然可以执行 SQL
+    // SQL can still be executed after heartbeat
     auto result = client.execute("SELECT 1");
     EXPECT_TRUE(result.success());
 

@@ -8,7 +8,7 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager* disk_manager
     : pool_size_(pool_size), disk_manager_(disk_manager) {
     frames_ = std::make_unique<BufferFrame[]>(pool_size);
 
-    // 初始化所有帧到LRU列表尾部（空闲）
+    // Initialize all frames to the tail of LRU list (free)
     for (size_t i = 0; i < pool_size; ++i) {
         lru_list_.push_back(i);
         lru_map_[i] = --lru_list_.end();
@@ -28,21 +28,21 @@ BufferFrame* BufferPoolManager::fetchPage(PageId page_id) {
 
     std::lock_guard<std::mutex> lock(mutex_);
 
-    // 检查页是否已在缓冲池中
+    // Check if page is already in buffer pool
     auto it = page_table_.find(page_id);
     if (it != page_table_.end()) {
         size_t frame_id = it->second;
         BufferFrame* frame = &frames_[frame_id];
         frame->pin();
 
-        // 移动到LRU头部（最近使用）
+        // Move to LRU head (most recently used)
         removeFromLRU(frame_id);
         addToLRUHead(frame_id);
 
         return frame;
     }
 
-    // 页不在缓冲池中，需要加载
+    // Page not in buffer pool, needs to be loaded
     size_t frame_id = findReplaceableFrame();
     if (frame_id >= pool_size_) {
         LOG_ERROR("No replaceable frame found for page " << page_id);
@@ -51,7 +51,7 @@ BufferFrame* BufferPoolManager::fetchPage(PageId page_id) {
 
     BufferFrame* frame = &frames_[frame_id];
 
-    // 如果帧是脏的，先写回磁盘
+    // If frame is dirty, flush to disk first
     if (frame->isDirty() && frame->getPageId() != INVALID_PAGE_ID) {
         if (!disk_manager_->writePage(frame->getPageId(), &frame->getPage())) {
             LOG_ERROR("Failed to flush dirty page " << frame->getPageId());
@@ -60,22 +60,22 @@ BufferFrame* BufferPoolManager::fetchPage(PageId page_id) {
         frame->setDirty(false);
     }
 
-    // 从页表中移除旧页
+    // Remove old page from page table
     if (frame->getPageId() != INVALID_PAGE_ID) {
         page_table_.erase(frame->getPageId());
     }
 
-    // 从磁盘读取页
+    // Read page from disk
     if (!disk_manager_->readPage(page_id, &frame->getPage())) {
         LOG_ERROR("Failed to read page " << page_id << " from disk");
         return nullptr;
     }
 
-    // 设置帧信息
+    // Set frame info
     frame->setPageId(page_id);
     frame->pin();
 
-    // 更新页表和LRU
+    // Update page table and LRU
     page_table_[page_id] = frame_id;
     removeFromLRU(frame_id);
     addToLRUHead(frame_id);
@@ -90,14 +90,14 @@ BufferFrame* BufferPoolManager::newPage(PageId* page_id) {
 
     std::lock_guard<std::mutex> lock(mutex_);
 
-    // 从磁盘管理器分配新页
+    // Allocate new page from disk manager
     PageId new_page_id = disk_manager_->allocatePage();
     if (new_page_id == INVALID_PAGE_ID) {
         LOG_ERROR("Failed to allocate new page from disk manager");
         return nullptr;
     }
 
-    // 找到可替换的帧
+    // Find replaceable frame
     size_t frame_id = findReplaceableFrame();
     if (frame_id >= pool_size_) {
         LOG_ERROR("No replaceable frame found for new page");
@@ -107,7 +107,7 @@ BufferFrame* BufferPoolManager::newPage(PageId* page_id) {
 
     BufferFrame* frame = &frames_[frame_id];
 
-    // 如果帧是脏的，先写回磁盘
+    // If frame is dirty, flush to disk first
     if (frame->isDirty() && frame->getPageId() != INVALID_PAGE_ID) {
         if (!disk_manager_->writePage(frame->getPageId(), &frame->getPage())) {
             LOG_ERROR("Failed to flush dirty page " << frame->getPageId());
@@ -117,18 +117,18 @@ BufferFrame* BufferPoolManager::newPage(PageId* page_id) {
         frame->setDirty(false);
     }
 
-    // 从页表中移除旧页
+    // Remove old page from page table
     if (frame->getPageId() != INVALID_PAGE_ID) {
         page_table_.erase(frame->getPageId());
     }
 
-    // 初始化新页
+    // Initialize new page
     frame->getPage().header().init(new_page_id);
     frame->setPageId(new_page_id);
     frame->pin();
     frame->setDirty(true);
 
-    // 更新页表和LRU
+    // Update page table and LRU
     page_table_[new_page_id] = frame_id;
     removeFromLRU(frame_id);
     addToLRUHead(frame_id);
@@ -160,7 +160,7 @@ bool BufferPoolManager::unpinPage(PageId page_id, bool is_dirty) {
         frame->setDirty(true);
     }
 
-    // 如果不再被固定，移动到LRU尾部
+    // If no longer pinned, move to LRU tail
     if (!frame->isPinned()) {
         removeFromLRU(frame_id);
         addToLRUTail(frame_id);
@@ -178,7 +178,7 @@ bool BufferPoolManager::flushPage(PageId page_id) {
 
     auto it = page_table_.find(page_id);
     if (it == page_table_.end()) {
-        // 页不在缓冲池中，可能已经在磁盘上是最新的
+        // Page not in buffer pool, may already be up-to-date on disk
         return true;
     }
 
@@ -225,25 +225,25 @@ bool BufferPoolManager::deletePage(PageId page_id) {
         size_t frame_id = it->second;
         BufferFrame* frame = &frames_[frame_id];
 
-        // 如果页被固定，不能删除
+        // Cannot delete pinned page
         if (frame->isPinned()) {
             LOG_ERROR("Cannot delete pinned page " << page_id);
             return false;
         }
 
-        // 重置帧
+        // Reset frame
         frame->setPageId(INVALID_PAGE_ID);
         frame->setDirty(false);
 
-        // 从页表中移除
+        // Remove from page table
         page_table_.erase(it);
 
-        // 移动到LRU尾部
+        // Move to LRU tail
         removeFromLRU(frame_id);
         addToLRUTail(frame_id);
     }
 
-    // 从磁盘管理器释放页
+    // Release page from disk manager
     disk_manager_->deallocatePage(page_id);
     return true;
 }
@@ -265,14 +265,14 @@ size_t BufferPoolManager::getDirtyPageCount() const {
 }
 
 size_t BufferPoolManager::findReplaceableFrame() {
-    // 从LRU列表尾部开始找（最久未使用）
+    // Search from the tail of LRU list (least recently used)
     for (auto it = lru_list_.rbegin(); it != lru_list_.rend(); ++it) {
         size_t frame_id = *it;
         if (!frames_[frame_id].isPinned()) {
             return frame_id;
         }
     }
-    return pool_size_;  // 未找到
+    return pool_size_;  // Not found
 }
 
 void BufferPoolManager::removeFromLRU(size_t frame_id) {

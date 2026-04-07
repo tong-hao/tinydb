@@ -9,34 +9,34 @@
 namespace tinydb {
 namespace storage {
 
-// 数据类型枚举
+// Data type enumeration
 enum class DataType : uint8_t {
     INVALID = 0,
-    INT32 = 1,      // 4字节整数
-    INT64 = 2,      // 8字节整数
-    FLOAT = 3,      // 4字节浮点
-    DOUBLE = 4,     // 8字节浮点
-    BOOL = 5,       // 1字节布尔
-    CHAR = 6,       // 定长字符串
-    VARCHAR = 7,    // 变长字符串
-    NULL_TYPE = 8,  // NULL值
-    DECIMAL = 9,     // DECIMAL类型（存储为DOUBLE）
+    INT32 = 1,      // 4-byte integer
+    INT64 = 2,      // 8-byte integer
+    FLOAT = 3,      // 4-byte float
+    DOUBLE = 4,     // 8-byte double
+    BOOL = 5,       // 1-byte boolean
+    CHAR = 6,       // Fixed-length string
+    VARCHAR = 7,    // Variable-length string
+    NULL_TYPE = 8,  // NULL value
+    DECIMAL = 9,     // DECIMAL type (stored as DOUBLE)
     DATE = 10,
     TIME = 11,
     DATETIME = 12
 };
 
-// 获取数据类型大小（定长类型）
+// Get data type size (fixed-length types)
 size_t getTypeSize(DataType type);
 
-// 检查类型是否为定长
+// Check if type is fixed-length
 bool isFixedLength(DataType type);
 
-// 列定义
+// Column definition
 struct ColumnDef {
     std::string name;
     DataType type;
-    uint32_t length;        // 对于CHAR/VARCHAR是最大长度
+    uint32_t length;        // Maximum length for CHAR/VARCHAR
     bool is_nullable;
     bool is_primary_key;
 
@@ -49,12 +49,12 @@ struct ColumnDef {
         if (isFixedLength(type)) {
             return getTypeSize(type);
         }
-        // 变长类型存储为：4字节长度 + 实际数据
+        // Variable-length types stored as: 4-byte length + actual data
         return sizeof(uint32_t) + length;
     }
 };
 
-// 表模式定义
+// Table schema definition
 class Schema {
 public:
     Schema() = default;
@@ -69,25 +69,25 @@ public:
 
     size_t getColumnCount() const { return columns_.size(); }
 
-    // 根据列名查找索引
+    // Find column index by name
     int findColumnIndex(const std::string& name) const;
 
-    // 获取列索引
+    // Get column by name
     const ColumnDef* getColumn(const std::string& name) const;
 
-    // 检查列是否存在
+    // Check if column exists
     bool columnExists(const std::string& name) const;
 
-    // 删除列
+    // Remove column
     bool removeColumn(const std::string& name);
 
-    // 修改列名
+    // Rename column
     bool renameColumn(const std::string& old_name, const std::string& new_name);
 
-    // 计算行的最大存储大小（所有列都非空且为最大长度）
+    // Calculate maximum row storage size (all columns non-null and at max length)
     size_t getRowMaxSize() const;
 
-    // 序列化/反序列化
+    // Serialize/deserialize
     std::vector<uint8_t> serialize() const;
     bool deserialize(const uint8_t* data, size_t size);
 
@@ -95,7 +95,7 @@ private:
     std::vector<ColumnDef> columns_;
 };
 
-// 字段值
+// Field value
 class Field {
 public:
     Field() : type_(DataType::NULL_TYPE), is_null_(true) {}
@@ -116,10 +116,10 @@ public:
     bool getBool() const;
     std::string getString() const;
 
-    // 序列化为字节数组
+    // Serialize to byte array
     std::vector<uint8_t> serialize() const;
 
-    // 从字节数组反序列化
+    // Deserialize from byte array
     static Field deserialize(const uint8_t* data, size_t size, DataType type);
 
     std::string toString() const;
@@ -130,7 +130,7 @@ private:
     bool is_null_;
 };
 
-// 元组（行）
+// Tuple (row)
 class Tuple {
 public:
     Tuple() = default;
@@ -139,18 +139,18 @@ public:
     void setSchema(const Schema* schema) { schema_ = schema; }
     const Schema* getSchema() const { return schema_; }
 
-    // 添加字段值
+    // Add field value
     void addField(const Field& field) { fields_.push_back(field); }
     void setField(size_t idx, const Field& field);
 
-    // 获取字段
+    // Get field
     const Field& getField(size_t idx) const { return fields_[idx]; }
     size_t getFieldCount() const { return fields_.size(); }
 
-    // 序列化为字节数组（用于存储到页中）
+    // Serialize to byte array (for storage in page)
     std::vector<uint8_t> serialize() const;
 
-    // 从字节数组反序列化
+    // Deserialize from byte array
     bool deserialize(const uint8_t* data, size_t size);
 
     std::string toString() const;
@@ -160,7 +160,7 @@ private:
     std::vector<Field> fields_;
 };
 
-// 元组ID (TID) - 用于定位行
+// Tuple ID (TID) - used to locate rows
 struct TID {
     PageId page_id;
     uint16_t slot_id;

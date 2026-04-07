@@ -10,7 +10,7 @@ namespace tinydb {
 using byte_t = uint8_t;
 using buffer_t = std::vector<byte_t>;
 
-// 消息类型
+// Message types
 enum class MessageType : uint8_t {
     SQL_COMMAND = 0x01,
     SQL_RESPONSE = 0x02,
@@ -19,14 +19,14 @@ enum class MessageType : uint8_t {
     ERROR = 0x05
 };
 
-// 协议常量
+// Protocol constants
 constexpr uint8_t PROTOCOL_MAGIC = 0x54;      // 'T'
 constexpr uint8_t PROTOCOL_VERSION = 0x01;
 constexpr size_t PROTOCOL_HEADER_SIZE = 12;
 constexpr size_t MAX_MESSAGE_SIZE = 16 * 1024 * 1024;  // 16MB
 constexpr size_t MAX_SQL_LENGTH = 1024 * 1024;         // 1MB
 
-// 错误码
+// Error codes
 enum class ErrorCode : uint32_t {
     OK = 0,
     E_INVALID_MAGIC = 0x00000001,

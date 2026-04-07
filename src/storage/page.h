@@ -8,24 +8,24 @@
 namespace tinydb {
 namespace storage {
 
-// 页大小常量
+// Page size constant
 constexpr uint32_t PAGE_SIZE = 8192;  // 8KB
 constexpr uint32_t MAX_PAGE_COUNT = 0xFFFFFFFF;
 
-// 页号类型
+// Page ID type
 using PageId = uint32_t;
 constexpr PageId INVALID_PAGE_ID = 0xFFFFFFFF;
 
-// 页头结构（位于每页的前部）
+// Page header structure (located at the beginning of each page)
 struct PageHeader {
-    uint32_t page_id;           // 页号
-    uint32_t next_page_id;      // 下一页号（用于链表）
-    uint16_t free_space;        // 空闲空间偏移量
-    uint16_t free_space_size;   // 空闲空间大小
-    uint16_t tuple_count;       // 元组数量
-    uint16_t flags;             // 页标志
-    uint32_t checksum;          // 校验和
-    uint32_t lsn;               // 日志序列号
+    uint32_t page_id;           // Page ID
+    uint32_t next_page_id;      // Next page ID (for linked list)
+    uint16_t free_space;        // Free space offset
+    uint16_t free_space_size;   // Free space size
+    uint16_t tuple_count;       // Number of tuples
+    uint16_t flags;             // Page flags
+    uint32_t checksum;          // Checksum
+    uint32_t lsn;               // Log sequence number
 
     static constexpr uint16_t FLAG_DIRTY = 0x0001;
     static constexpr uint16_t FLAG_WAL_LOGGED = 0x0002;
@@ -42,11 +42,11 @@ struct PageHeader {
     }
 };
 
-// 页内槽位目录项（从页尾向前增长）
+// Slot directory entry within a page (grows backward from page end)
 struct SlotEntry {
-    uint16_t offset;    // 元组偏移量
-    uint16_t length;    // 元组长度
-    uint16_t flags;     // 标志位
+    uint16_t offset;    // Tuple offset
+    uint16_t length;    // Tuple length
+    uint16_t flags;     // Flag bits
 
     static constexpr uint16_t FLAG_IN_USE = 0x0001;
     static constexpr uint16_t FLAG_DELETED = 0x0002;
@@ -63,62 +63,62 @@ struct SlotEntry {
     }
 };
 
-// 数据页类
+// Data page class
 class Page {
 public:
     Page() = default;
     explicit Page(PageId id) { header().init(id); }
 
-    // 获取页头
+    // Get page header
     PageHeader& header() { return *reinterpret_cast<PageHeader*>(data_.data()); }
     const PageHeader& header() const { return *reinterpret_cast<const PageHeader*>(data_.data()); }
 
-    // 获取页号
+    // Get page ID
     PageId getPageId() const { return header().page_id; }
 
-    // 获取原始数据指针
+    // Get raw data pointer
     char* getData() { return data_.data(); }
     const char* getData() const { return data_.data(); }
 
-    // 获取页大小
+    // Get page size
     static constexpr size_t getSize() { return PAGE_SIZE; }
 
-    // 槽位操作
+    // Slot operations
     SlotEntry* getSlot(uint16_t slot_id);
     const SlotEntry* getSlot(uint16_t slot_id) const;
     uint16_t getSlotCount() const { return header().tuple_count; }
 
-    // 插入元组，返回槽位号
+    // Insert tuple, returns slot ID
     uint16_t insertTuple(const char* data, uint16_t length);
 
-    // 获取元组数据
+    // Get tuple data
     char* getTupleData(uint16_t slot_id);
     const char* getTupleData(uint16_t slot_id) const;
     uint16_t getTupleLength(uint16_t slot_id) const;
 
-    // 删除元组（标记删除）
+    // Delete tuple (mark as deleted)
     bool deleteTuple(uint16_t slot_id);
 
-    // 检查是否有足够空间
+    // Check if enough space available
     bool hasEnoughSpace(uint16_t length) const;
 
-    // 计算校验和
+    // Calculate checksum
     uint32_t calculateChecksum() const;
     void updateChecksum() { header().checksum = calculateChecksum(); }
     bool verifyChecksum() const { return header().checksum == calculateChecksum(); }
 
-    // 序列化/反序列化
+    // Serialize/deserialize
     void serialize(char* buffer) const { std::memcpy(buffer, data_.data(), PAGE_SIZE); }
     void deserialize(const char* buffer) { std::memcpy(data_.data(), buffer, PAGE_SIZE); }
 
 private:
     std::array<char, PAGE_SIZE> data_;
 
-    // 获取槽位数组起始位置（从页尾向前）
+    // Get slot array starting position (from page end backward)
     SlotEntry* getSlotArray();
     const SlotEntry* getSlotArray() const;
 
-    // 计算槽位数组占用的空间
+    // Calculate slot array occupied space
     size_t getSlotArraySize() const { return header().tuple_count * sizeof(SlotEntry); }
 };
 

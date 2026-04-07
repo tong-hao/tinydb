@@ -12,7 +12,7 @@
 namespace tinydb {
 namespace storage {
 
-// 缓冲页帧
+// Buffer page frame
 class BufferFrame {
 public:
     BufferFrame() : page_id_(INVALID_PAGE_ID), pin_count_(0), is_dirty_(false) {}
@@ -39,78 +39,78 @@ public:
     bool isPinned() const { return pin_count_ > 0; }
 
 private:
-    PageId page_id_;        // 页号
-    Page page_;             // 页数据
-    std::atomic<int> pin_count_;    // 引用计数
-    std::atomic<bool> is_dirty_;    // 脏页标志
+    PageId page_id_;        // Page ID
+    Page page_;             // Page data
+    std::atomic<int> pin_count_;    // Pin count (reference count)
+    std::atomic<bool> is_dirty_;    // Dirty page flag
 };
 
-// 缓冲池管理器
+// Buffer pool manager
 class BufferPoolManager {
 public:
     explicit BufferPoolManager(size_t pool_size, DiskManager* disk_manager);
     ~BufferPoolManager();
 
-    // 禁止拷贝
+    // Disable copy
     BufferPoolManager(const BufferPoolManager&) = delete;
     BufferPoolManager& operator=(const BufferPoolManager&) = delete;
 
-    // 获取页（从缓冲池或磁盘加载）
+    // Fetch page (from buffer pool or load from disk)
     BufferFrame* fetchPage(PageId page_id);
 
-    // 创建新页
+    // Create new page
     BufferFrame* newPage(PageId* page_id);
 
-    // 释放页（减少引用计数）
+    // Release page (decrease pin count)
     bool unpinPage(PageId page_id, bool is_dirty);
 
-    // 刷新页到磁盘
+    // Flush page to disk
     bool flushPage(PageId page_id);
 
-    // 刷新所有脏页
+    // Flush all dirty pages
     void flushAllPages();
 
-    // 删除页
+    // Delete page
     bool deletePage(PageId page_id);
 
-    // 获取缓冲池大小
+    // Get buffer pool size
     size_t getPoolSize() const { return pool_size_; }
 
-    // 获取当前缓冲的页数
+    // Get current number of buffered pages
     size_t getPageCount() const;
 
-    // 获取脏页数量
+    // Get number of dirty pages
     size_t getDirtyPageCount() const;
 
 private:
-    size_t pool_size_;                          // 缓冲池大小
-    DiskManager* disk_manager_;                 // 磁盘管理器
+    size_t pool_size_;                          // Buffer pool size
+    DiskManager* disk_manager_;                 // Disk manager
 
-    // 缓冲帧数组
+    // Buffer frame array
     std::unique_ptr<BufferFrame[]> frames_;
 
-    // 页号到帧索引的映射
+    // Mapping from page ID to frame index
     std::unordered_map<PageId, size_t> page_table_;
 
-    // LRU列表（存储帧索引）
+    // LRU list (stores frame indices)
     std::list<size_t> lru_list_;
 
-    // LRU列表中的位置映射（用于O(1)删除）
+    // Position mapping in LRU list (for O(1) removal)
     std::unordered_map<size_t, std::list<size_t>::iterator> lru_map_;
 
-    // 互斥锁
+    // Mutex
     mutable std::mutex mutex_;
 
-    // 找到可替换的帧（未固定的页）
+    // Find replaceable frame (unpinned page)
     size_t findReplaceableFrame();
 
-    // 从LRU列表中移除
+    // Remove from LRU list
     void removeFromLRU(size_t frame_id);
 
-    // 添加到LRU列表头部（最近使用）
+    // Add to LRU list head (most recently used)
     void addToLRUHead(size_t frame_id);
 
-    // 添加到LRU列表尾部（最久未使用）
+    // Add to LRU list tail (least recently used)
     void addToLRUTail(size_t frame_id);
 };
 

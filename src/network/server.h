@@ -10,7 +10,7 @@
 namespace tinydb {
 namespace network {
 
-// 请求处理器接口
+// Request handler interface
 class RequestHandler {
 public:
     virtual ~RequestHandler() = default;
@@ -27,21 +27,21 @@ public:
     Server(const Server&) = delete;
     Server& operator=(const Server&) = delete;
 
-    // 启动服务器（阻塞）
+    // Start server (blocking)
     void run();
 
-    // 停止服务器
+    // Stop server
     void stop();
 
-    // 获取状态
+    // Get status
     bool isRunning() const { return running_.load(); }
     uint16_t port() const { return port_; }
 
 private:
-    // 接受连接循环
+    // Accept connection loop
     void acceptLoop();
 
-    // 处理客户端连接
+    // Handle client connection
     void handleClient(Connection conn);
 
     uint16_t port_;

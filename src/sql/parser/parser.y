@@ -80,7 +80,7 @@ extern SQLParseTree* g_ast;
     std::vector<std::unique_ptr<JoinTable>>* join_table_list;
 }
 
-%define parse.error verbose
+%error-verbose
 
 /* 运算符优先级（从低到高） */
 %left OR
