@@ -360,7 +360,7 @@ bool StorageEngine::createIndex(const std::string& index_name, const std::string
         return false;
     }
 
-    // TODO: 这里太耗时了，应该通过后台线程进行
+    // TODO: 这里太耗时了，应该通过后台线程进行（稍后）
     // 扫描表数据并构建索引
     auto it = table_manager_->makeIterator(table_name);
     while (it.hasNext()) {

@@ -758,7 +758,6 @@ storage::Field Executor::evaluateJoinExpression(const sql::Expression* expr,
 
             // 在指定表中查找
             for (size_t i = 0; i < schemas.size(); ++i) {
-                // TODO: 简化处理：假设表名在schema中（需要扩展）
                 int col_idx = schemas[i]->findColumnIndex(actual_col);
                 if (col_idx >= 0 && i < tuples.size()) {
                     return tuples[i].getField(col_idx);

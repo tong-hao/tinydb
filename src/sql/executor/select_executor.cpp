@@ -6,6 +6,205 @@
 namespace tinydb {
 namespace engine {
 
+// 辅助函数：判断字符串是否匹配 LIKE 模式
+static bool matchLikePattern(const std::string& value, const std::string& pattern) {
+    size_t val_idx = 0;
+    size_t pat_idx = 0;
+    size_t val_len = value.size();
+    size_t pat_len = pattern.size();
+    size_t val_backup = 0;
+    size_t pat_backup = 0;
+    bool has_backup = false;
+
+    while (val_idx < val_len) {
+        if (pat_idx < pat_len) {
+            char pat_char = pattern[pat_idx];
+            if (pat_char == '%') {
+                pat_idx++;
+                val_backup = val_idx;
+                pat_backup = pat_idx;
+                has_backup = true;
+                continue;
+            } else if (pat_char == '_') {
+                pat_idx++;
+                val_idx++;
+                continue;
+            } else if (pat_char == value[val_idx]) {
+                pat_idx++;
+                val_idx++;
+                continue;
+            }
+        }
+        if (has_backup && val_backup < val_len) {
+            val_backup++;
+            val_idx = val_backup;
+            pat_idx = pat_backup;
+            continue;
+        }
+        return false;
+    }
+    while (pat_idx < pat_len && pattern[pat_idx] == '%') {
+        pat_idx++;
+    }
+    return pat_idx == pat_len;
+}
+
+// 辅助函数：评估系统视图的 WHERE 条件
+// row: 当前行数据
+// column_names: 列名列表
+// condition: WHERE 条件表达式
+static bool evaluateSystemViewWhereCondition(
+    const std::vector<std::string>& row,
+    const std::vector<std::string>& column_names,
+    const sql::Expression* condition) {
+    if (!condition) return true;
+
+    // 获取列值的辅助 lambda
+    auto getColumnValue = [&](const std::string& col_name, std::string& out_val) -> bool {
+        for (size_t i = 0; i < column_names.size(); ++i) {
+            if (column_names[i] == col_name && i < row.size()) {
+                out_val = row[i];
+                return true;
+            }
+        }
+        return false;
+    };
+
+    // 评估表达式并返回值
+    auto evaluateExpr = [&](const sql::Expression* expr, std::string& out_val) -> bool {
+        if (auto col_ref = dynamic_cast<const sql::ColumnRefExpr*>(expr)) {
+            return getColumnValue(col_ref->columnName(), out_val);
+        } else if (auto literal = dynamic_cast<const sql::LiteralExpr*>(expr)) {
+            out_val = literal->value();
+            // 去除引号
+            if (out_val.size() >= 2 && out_val.front() == '\'' && out_val.back() == '\'') {
+                out_val = out_val.substr(1, out_val.size() - 2);
+            }
+            return true;
+        }
+        return false;
+    };
+
+    // 处理比较表达式
+    if (auto comp_expr = dynamic_cast<const sql::ComparisonExpr*>(condition)) {
+        std::string left_val, right_val;
+        if (!evaluateExpr(comp_expr->left(), left_val) ||
+            !evaluateExpr(comp_expr->right(), right_val)) {
+            return false;
+        }
+
+        switch (comp_expr->op()) {
+            case sql::OpType::EQ:
+                return left_val == right_val;
+            case sql::OpType::NE:
+                return left_val != right_val;
+            case sql::OpType::LT:
+                try {
+                    return std::stod(left_val) < std::stod(right_val);
+                } catch (...) {
+                    return left_val < right_val;
+                }
+            case sql::OpType::LE:
+                try {
+                    return std::stod(left_val) <= std::stod(right_val);
+                } catch (...) {
+                    return left_val <= right_val;
+                }
+            case sql::OpType::GT:
+                try {
+                    return std::stod(left_val) > std::stod(right_val);
+                } catch (...) {
+                    return left_val > right_val;
+                }
+            case sql::OpType::GE:
+                try {
+                    return std::stod(left_val) >= std::stod(right_val);
+                } catch (...) {
+                    return left_val >= right_val;
+                }
+            default:
+                return false;
+        }
+    }
+
+    // 处理逻辑表达式
+    if (auto logic_expr = dynamic_cast<const sql::LogicalExpr*>(condition)) {
+        auto left_result = evaluateSystemViewWhereCondition(row, column_names, logic_expr->left());
+
+        if (logic_expr->op() == sql::OpType::AND) {
+            if (!left_result) return false;
+            return evaluateSystemViewWhereCondition(row, column_names, logic_expr->right());
+        } else if (logic_expr->op() == sql::OpType::OR) {
+            if (left_result) return true;
+            return evaluateSystemViewWhereCondition(row, column_names, logic_expr->right());
+        } else if (logic_expr->op() == sql::OpType::NOT) {
+            return !left_result;
+        }
+    }
+
+    // 处理 LIKE 表达式
+    if (auto like_expr = dynamic_cast<const sql::LikeExpr*>(condition)) {
+        std::string left_val, pattern;
+        if (!evaluateExpr(like_expr->left(), left_val) ||
+            !evaluateExpr(like_expr->pattern(), pattern)) {
+            return false;
+        }
+        bool matches = matchLikePattern(left_val, pattern);
+        return like_expr->isNot() ? !matches : matches;
+    }
+
+    // 处理 IS NULL 表达式
+    if (auto is_null_expr = dynamic_cast<const sql::IsNullExpr*>(condition)) {
+        std::string left_val;
+        if (!evaluateExpr(is_null_expr->left(), left_val)) {
+            return false;
+        }
+        bool is_null = left_val.empty() || left_val == "NULL";
+        return is_null_expr->isNot() ? !is_null : is_null;
+    }
+
+    // 处理 IN 表达式
+    if (auto in_expr = dynamic_cast<const sql::InExpr*>(condition)) {
+        std::string left_val;
+        if (!evaluateExpr(in_expr->left(), left_val)) {
+            return false;
+        }
+        bool found = false;
+        for (const auto& val_expr : in_expr->values()) {
+            std::string val;
+            if (evaluateExpr(val_expr.get(), val)) {
+                if (left_val == val) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        return in_expr->isNot() ? !found : found;
+    }
+
+    // 处理 BETWEEN 表达式
+    if (auto between_expr = dynamic_cast<const sql::BetweenExpr*>(condition)) {
+        std::string left_val, lower_val, upper_val;
+        if (!evaluateExpr(between_expr->left(), left_val) ||
+            !evaluateExpr(between_expr->lower(), lower_val) ||
+            !evaluateExpr(between_expr->upper(), upper_val)) {
+            return false;
+        }
+        bool in_range = false;
+        try {
+            double left_num = std::stod(left_val);
+            double lower_num = std::stod(lower_val);
+            double upper_num = std::stod(upper_val);
+            in_range = (left_num >= lower_num && left_num <= upper_num);
+        } catch (...) {
+            in_range = (left_val >= lower_val && left_val <= upper_val);
+        }
+        return between_expr->isNot() ? !in_range : in_range;
+    }
+
+    return true;
+}
+
 SelectExecutor::SelectExecutor(storage::StorageEngine* storage_engine)
     : storage_engine_(storage_engine) {
     LOG_INFO("SelectExecutor initialized");
@@ -135,12 +334,12 @@ ExecutionResult SelectExecutor::execute(const sql::SelectStmt* stmt) {
             // 打印数据行
             int count = 0;
             for (const auto& row : view_result.rows) {
-                // 如果有过滤条件，这里需要简单处理
-                // 注意：完整的 WHERE 评估需要更复杂的实现
+                // 应用 WHERE 条件过滤
                 bool skip = false;
                 if (where_condition) {
-                    // TODO: 简化处理：检查字符串匹配
-                    // 对于系统视图，我们暂时不过滤或仅做简单过滤
+                    if (!evaluateSystemViewWhereCondition(row, view_result.column_names, where_condition)) {
+                        skip = true;
+                    }
                 }
                 if (skip) continue;
 

@@ -50,7 +50,7 @@ void DiagnosticsManager::recordInsert(const std::string& table_name) {
 void DiagnosticsManager::recordUpdate(const std::string& table_name) {
     std::lock_guard<std::mutex> lock(mutex_);
     table_stats_[table_name].row_update_count++;
-    // 更新会产生死行（简化处理） TODO: 
+    // 更新会产生死行
     table_stats_[table_name].row_dead_count++;
 }
 

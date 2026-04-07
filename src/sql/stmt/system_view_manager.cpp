@@ -531,7 +531,7 @@ SystemViewResult SystemViewManager::queryTnTables() {
             row.push_back(table_name);
             row.push_back("tinydb");  // tableowner
             row.push_back("tn_default");  // tablespace
-            row.push_back("f");  // hasindexes (简化处理) TODO: 
+            row.push_back("f");  // hasindexes (简化处理) TODO: 后续完善
             row.push_back("f");  // hasrules
             row.push_back("f");  // hastriggers
             result.rows.push_back(row);

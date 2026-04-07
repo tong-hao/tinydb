@@ -277,7 +277,7 @@ double QueryOptimizer::estimateSelectivity(const std::string& table_name,
     double combined_selectivity = 1.0;
 
     for (const auto& cond : conditions) {
-        // TODO: 简化处理：假设每个条件的独立选择率
+        // TODO: 假设每个条件的独立选择率（后续完善）
         combined_selectivity *= 0.05;  // 默认选择率5%
     }
 
@@ -361,7 +361,7 @@ bool QueryOptimizer::isIndexOnlyScan(const std::string& table_name,
                                      const std::string& index_name,
                                      const std::vector<std::unique_ptr<sql::Expression>>& select_list) {
     // 检查查询列是否都在索引中
-    // TODO: 简化处理：只检查单列索引
+    // TODO: 只检查单列索引 （后续完善）
     if (!index_mgr_) return false;
 
     auto index = index_mgr_->getIndex(index_name);

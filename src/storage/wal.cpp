@@ -182,7 +182,7 @@ LSN WALManager::appendLog(LogRecordType type, TransactionId txn_id, const uint8_
         lsn = current_lsn_.fetch_add(record.getSize());
     }
 
-    // 这里简化处理，实际LSN应该基于文件偏移 TODO: 
+    // 这里简化处理，实际LSN应该基于文件偏移
     // 为了简化，我们使用递增的LSN
     record.setLSN(lsn);
     record.setChecksum(record.calculateChecksum());
